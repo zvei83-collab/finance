@@ -2233,12 +2233,14 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
   }
 
   // ---------- Collapsible Filters Toggle Listener (P2: 4.4) ----------
-  $('#btn-toggle-filters')?.addEventListener('click', () => {
+  $('#btn-toggle-filters')?.addEventListener('click', (e) => {
+    if (e) e.preventDefault();
     const container = $('#filters-container');
-    if (container) {
+    const btn = $('#btn-toggle-filters');
+    if (container && btn) {
       container.classList.toggle('collapsed');
       const isCollapsed = container.classList.contains('collapsed');
-      $('#btn-toggle-filters').classList.toggle('active', !isCollapsed);
+      btn.classList.toggle('active', !isCollapsed);
     }
   });
 
