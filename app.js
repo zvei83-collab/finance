@@ -1,7 +1,35 @@
 // Finance PWA — local storage & Firebase sync app
+function showToast(msg, type = 'info', duration = 3500) {
+  let container = document.querySelector('#toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  
+  let icon = 'ℹ️';
+  if (type === 'success') icon = '✓';
+  if (type === 'error') icon = '⚠️';
+  if (type === 'warning') icon = '🔔';
+
+  const cleanMsg = (typeof msg === 'string' ? msg : String(msg)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  toast.innerHTML = `<span style="font-size:16px; flex-shrink:0;">${icon}</span><span>${cleanMsg.replace(/\n/g, '<br>')}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('toast-out');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
 window.onerror = function(msg, url, line, col, error) {
   console.error('GLOBAL JS ERROR:', msg, 'at', line, ':', col, error);
-  alert('Сбой скрипта: ' + msg + ' (строка ' + line + ')');
+  showToast('Произошла непредвиденная ошибка интерфейса. Мы зафиксировали проблему.', 'error', 4000);
+  return false;
 };
 
 const firebaseConfig = {
@@ -316,7 +344,7 @@ const isFirebaseConfigured = () => {
         } catch (e) {
           console.warn('Firebase init error', e);
           updateSyncStatus('offline', '● Локальный режим');
-          alert('Ошибка загрузки Firebase: ' + (e.message || e));
+          showToast('Ошибка загрузки Firebase: ' + (e.message || e), 'error', 5000);
           firebasePromise = null;
           return false;
         }
@@ -342,7 +370,7 @@ const isFirebaseConfigured = () => {
 
   $('#btn-google-login').addEventListener('click', async () => {
     if (!isFirebaseConfigured()) {
-      alert('Для синхронизации заполните ключи в файле firebase-config.js.');
+      showToast('Для синхронизации заполните ключи в файле firebase-config.js.', 'warning');
       return;
     }
     const btn = $('#btn-google-login');
@@ -360,7 +388,6 @@ const isFirebaseConfigured = () => {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
 
-      // Пробуем Popup на всех устройствах для избежания блокировок 3rd-party cookies при Redirect на Netlify
       try {
         await signInWithPopup(auth, provider);
       } catch (popupErr) {
@@ -374,17 +401,17 @@ const isFirebaseConfigured = () => {
     } catch (err) {
       console.error('Firebase Auth error:', err);
       if (err.code === 'auth/unauthorized-domain') {
-        alert('⚠️ Домен вашего сайта на Netlify не добавлен в разрешённые домены Firebase!\n\n1. Зайдите в Firebase Console (console.firebase.google.com)\n2. Перейдите в Authentication -> вкладка Settings -> Authorized domains\n3. Нажмите "Add domain" и вставьте адрес вашего сайта Netlify (например: xxx.netlify.app).');
+        showToast('⚠️ Домен вашего сайта не добавлен в разрешённые домены Firebase! Добавьте его в Firebase Console -> Authentication -> Settings -> Authorized domains.', 'error', 6000);
       } else if (err.code === 'auth/popup-blocked') {
-        alert('Браузер заблокировал всплывающее окно входа. Разрешите всплывающие окна для этого сайта в настройках смартфона.');
+        showToast('Браузер заблокировал всплывающее окно входа. Разрешите всплывающие окна в настройках.', 'warning');
       } else if (err.code === 'auth/operation-not-allowed') {
-        alert('В Firebase Console не включён способ входа "Google". Зайдите в Firebase Console -> Authentication -> Sign-in method и включите Google.');
+        showToast('В Firebase Console не включён способ входа Google.', 'error', 5000);
       } else if (err.code === 'auth/invalid-api-key') {
-        alert('Неверный API-ключ в файле firebase-config.js.');
+        showToast('Неверный API-ключ в файле firebase-config.js.', 'error');
       } else if (err.code === 'auth/network-request-failed') {
-        alert('Ошибка сети при подключении к Google. Проверьте интернет или отключите VPN.');
+        showToast('Ошибка сети при подключении к Google. Проверьте интернет.', 'error');
       } else {
-        alert('Ошибка входа: ' + (err.message || err.code || err));
+        showToast('Ошибка входа: ' + (err.message || err.code || err), 'error');
       }
     } finally {
       btn.disabled = false;
@@ -457,7 +484,7 @@ const isFirebaseConfigured = () => {
     $('#tx-delete').hidden = !txId;
 
     if (state.accounts.length === 0) {
-      alert('Сначала добавьте счёт');
+      showToast('Сначала добавьте счёт', 'warning');
       return;
     }
 
@@ -523,7 +550,7 @@ const isFirebaseConfigured = () => {
   $('#tx-save').addEventListener('click', () => {
     const rawAmount = $('#tx-amount').value.replace(',', '.');
     const amount = parseFloat(rawAmount);
-    if (!amount || amount <= 0) { alert('Введите корректную сумму'); return; }
+    if (!amount || amount <= 0) { showToast('Введите корректную сумму', 'warning'); return; }
     const accountId = $('#tx-account').value;
     const toAccountId = $('#tx-to-account').value;
     const categoryId = txType === 'transfer' ? null : $('#tx-category').value;
@@ -532,7 +559,7 @@ const isFirebaseConfigured = () => {
     const forgivenDebt = $('#tx-forgive-debt') ? $('#tx-forgive-debt').checked : false;
 
     if (txType === 'transfer' && accountId === toAccountId) {
-      alert('Счета списания и зачисления должны отличаться');
+      showToast('Счета списания и зачисления должны отличаться', 'warning');
       return;
     }
 
@@ -549,12 +576,13 @@ const isFirebaseConfigured = () => {
     recalculateAllGoals();
     save();
     render();
+    showToast('Операция сохранена', 'success', 2000);
   });
 
   $('#tx-save-next')?.addEventListener('click', () => {
     const rawAmount = $('#tx-amount').value.replace(',', '.');
     const amount = parseFloat(rawAmount);
-    if (!amount || amount <= 0) { alert('Введите корректную сумму'); return; }
+    if (!amount || amount <= 0) { showToast('Введите корректную сумму', 'warning'); return; }
     const accountId = $('#tx-account').value;
     const toAccountId = $('#tx-to-account').value;
     const categoryId = txType === 'transfer' ? null : $('#tx-category').value;
@@ -563,7 +591,7 @@ const isFirebaseConfigured = () => {
     const forgivenDebt = $('#tx-forgive-debt') ? $('#tx-forgive-debt').checked : false;
 
     if (txType === 'transfer' && accountId === toAccountId) {
-      alert('Счета списания и зачисления должны отличаться');
+      showToast('Счета списания и зачисления должны отличаться', 'warning');
       return;
     }
 
@@ -574,6 +602,7 @@ const isFirebaseConfigured = () => {
     recalculateAllGoals();
     save();
     render();
+    showToast('Операция добавлена', 'success', 2000);
 
     // Reset amount and note, keep date, account, category for next entry
     $('#tx-amount').value = '';
@@ -584,7 +613,7 @@ const isFirebaseConfigured = () => {
   // ---------- Bulk Transaction Entry ----------
   function openBulkModal() {
     if (state.accounts.length === 0) {
-      alert('Сначала добавьте счёт');
+      showToast('Сначала добавьте счёт', 'warning');
       return;
     }
 
@@ -643,7 +672,7 @@ const isFirebaseConfigured = () => {
     const defaultAccountId = $('#bulk-account').value;
 
     if (!defaultAccountId) {
-      alert('Выберите счёт');
+      showToast('Выберите счёт', 'warning');
       return;
     }
 
@@ -671,7 +700,7 @@ const isFirebaseConfigured = () => {
     });
 
     if (addedCount === 0) {
-      alert('Заполните хотя бы одну сумму');
+      showToast('Заполните хотя бы одну сумму', 'warning');
       return;
     }
 
@@ -821,7 +850,7 @@ const isFirebaseConfigured = () => {
 
   $('#btn-remember-balance')?.addEventListener('click', () => {
     if (!editingAccId) {
-      alert('Сначала сохраните счёт');
+      showToast('Сначала сохраните счёт', 'warning');
       return;
     }
     const acc = state.accounts.find(a => a.id === editingAccId);
@@ -844,7 +873,7 @@ const isFirebaseConfigured = () => {
     const balance = parseFloat($('#acc-balance').value) || 0;
     const excludeFromTotal = $('#acc-exclude') ? $('#acc-exclude').checked : false;
 
-    if (!name) { alert('Введите название'); return; }
+    if (!name) { showToast('Введите название', 'warning'); return; }
     if (editingAccId) {
       const a = state.accounts.find(x => x.id === editingAccId);
       a.name = name; a.balance = balance; a.excludeFromTotal = excludeFromTotal;
@@ -852,6 +881,7 @@ const isFirebaseConfigured = () => {
       state.accounts.push({ id: uid(), name, balance, excludeFromTotal });
     }
     save(); closeModal('#modal-account'); render();
+    showToast('Счёт сохранён', 'success', 2000);
   });
 
   $('#acc-delete').addEventListener('click', () => {
@@ -861,6 +891,7 @@ const isFirebaseConfigured = () => {
     state.transactions = state.transactions.filter(t => t.accountId !== editingAccId && t.toAccountId !== editingAccId);
     state.accounts = state.accounts.filter(a => a.id !== editingAccId);
     save(); closeModal('#modal-account'); render();
+    showToast('Счёт удалён', 'info', 2000);
   });
 
   // ---------- Category Modal ----------
@@ -896,7 +927,7 @@ const isFirebaseConfigured = () => {
     const budget = parseFloat($('#cat-budget-limit').value) || 0;
     const color = $('#cat-color-input')?.value;
 
-    if (!name) { alert('Введите название'); return; }
+    if (!name) { showToast('Введите название', 'warning'); return; }
     if (editingCatId) {
       const c = state.categories.find(x => x.id === editingCatId);
       c.name = name; c.type = type; c.budget = budget; c.color = color;
@@ -904,6 +935,7 @@ const isFirebaseConfigured = () => {
       state.categories.push({ id: uid(), name, type, budget, color });
     }
     save(); closeModal('#modal-cat'); render();
+    showToast('Категория сохранена', 'success', 2000);
   });
 
   $('#cat-delete').addEventListener('click', () => {
@@ -913,6 +945,7 @@ const isFirebaseConfigured = () => {
     state.categories = state.categories.filter(c => c.id !== editingCatId);
     state.transactions.forEach(t => { if (t.categoryId === editingCatId) t.categoryId = null; });
     save(); closeModal('#modal-cat'); render();
+    showToast('Категория удалена', 'info', 2000);
   });
 
   function ensureGoalCategory() {
@@ -946,7 +979,7 @@ const isFirebaseConfigured = () => {
     const targetAmount = parseFloat($('#goal-target').value) || 0;
     const currentAmount = parseFloat($('#goal-current').value) || 0;
 
-    if (!name || targetAmount <= 0) { alert('Укажите название и корректную целевую сумму'); return; }
+    if (!name || targetAmount <= 0) { showToast('Укажите название и корректную целевую сумму', 'warning'); return; }
 
     if (editingGoalId) {
       const g = state.goals.find(x => x.id === editingGoalId);
@@ -976,6 +1009,7 @@ const isFirebaseConfigured = () => {
       });
     }
     save(); closeModal('#modal-goal'); render();
+    showToast('Цель сохранена', 'success', 2000);
   });
 
   $('#goal-delete').addEventListener('click', () => {
@@ -987,6 +1021,7 @@ const isFirebaseConfigured = () => {
     }
     state.goals = state.goals.filter(g => g.id !== editingGoalId);
     save(); closeModal('#modal-goal'); render();
+    showToast('Цель удалена', 'info', 2000);
   });
 
   // ---------- Goal Deposit / Withdraw Modal ----------
@@ -1020,7 +1055,7 @@ const isFirebaseConfigured = () => {
 
   $('#goal-deposit-save').addEventListener('click', () => {
     const amount = parseFloat($('#goal-deposit-amount').value);
-    if (!amount || amount <= 0) { alert('Введите сумму'); return; }
+    if (!amount || amount <= 0) { showToast('Введите сумму', 'warning'); return; }
 
     const g = state.goals.find(x => x.id === activeDepositGoalId);
     if (!g) return;
@@ -1052,6 +1087,7 @@ const isFirebaseConfigured = () => {
     }
 
     save(); closeModal('#modal-goal-deposit'); render();
+    showToast(depositAction === 'deposit' ? 'Копилка пополнена' : 'Средства сняты с цели', 'success', 2000);
   });
 
   // ---------- Recurring Modal ----------
@@ -1096,7 +1132,7 @@ const isFirebaseConfigured = () => {
     const categoryId = $('#rec-category').value;
     const period = $('#rec-period').value;
 
-    if (!title || !amount || amount <= 0) { alert('Заполните название и сумму'); return; }
+    if (!title || !amount || amount <= 0) { showToast('Заполните название и сумму', 'warning'); return; }
 
     if (editingRecId) {
       const r = state.recurring.find(x => x.id === editingRecId);
@@ -1105,6 +1141,7 @@ const isFirebaseConfigured = () => {
       state.recurring.push({ id: uid(), title, amount, type: recType, accountId, categoryId, period });
     }
     save(); closeModal('#modal-recurring'); render();
+    showToast('Подписка сохранена', 'success', 2000);
   });
 
   $('#rec-delete').addEventListener('click', () => {
@@ -1112,6 +1149,7 @@ const isFirebaseConfigured = () => {
     if (!confirm('Удалить эту подписку?')) return;
     state.recurring = state.recurring.filter(r => r.id !== editingRecId);
     save(); closeModal('#modal-recurring'); render();
+    showToast('Подписка удалена', 'info', 2000);
   });
 
   // ---------- Export / Import ----------
@@ -1123,6 +1161,7 @@ const isFirebaseConfigured = () => {
     a.download = `finance-${todayISO()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    showToast('Файл данных экспортирован', 'success', 2000);
   });
   $('#btn-import').addEventListener('click', () => $('#file-import').click());
   $('#file-import').addEventListener('change', async (e) => {
@@ -1133,9 +1172,9 @@ const isFirebaseConfigured = () => {
       if (!data.accounts || !data.categories || !data.transactions) throw new Error('Неверный формат');
       if (!confirm('Заменить текущие данные импортируемыми?')) return;
       state = data; save(); render();
-      alert('Импорт выполнен');
+      showToast('Импорт выполнен успешно!', 'success');
     } catch (err) {
-      alert('Ошибка импорта: ' + err.message);
+      showToast('Ошибка импорта: ' + err.message, 'error', 4000);
     }
     e.target.value = '';
   });
@@ -1442,7 +1481,7 @@ const isFirebaseConfigured = () => {
           <div class="tx-badge expense">${SVG_ICONS.expense}</div>
           <div class="tx-main">
             <div class="tx-title">${escapeHtml(t.note || catName)}</div>
-            <div class="tx-sub">${accountName(t.accountId)} · ${formatDate(t.date)}</div>
+            <div class="tx-sub">${escapeHtml(accountName(t.accountId))} · ${formatDate(t.date)}</div>
           </div>
           <div class="tx-amount expense">− ${fmt(t.amount)}</div>
         `;
@@ -1707,11 +1746,11 @@ const isFirebaseConfigured = () => {
 
           let catNameFormatted = cat?.name ? `<span style="color:${getCategoryColor(cat)}; font-weight:600;">${escapeHtml(cat.name)}</span>` : 'Без категории';
           let title = catNameFormatted;
-          let sub = accountName(t.accountId);
+          let sub = escapeHtml(accountName(t.accountId));
           let sign = t.type === 'income' ? '+' : '−';
 
           if (t.type === 'transfer') {
-            title = `Перевод: ${accountName(t.accountId)} ➔ ${accountName(t.toAccountId)}`;
+            title = `Перевод: ${escapeHtml(accountName(t.accountId))} ➔ ${escapeHtml(accountName(t.toAccountId))}`;
             sub = 'Внутренний перевод';
             sign = '↔';
           } else if (t.note) {
@@ -1804,9 +1843,14 @@ const isFirebaseConfigured = () => {
 
     if (expCats.length === 0) {
       const li = document.createElement('li');
-      li.className = 'empty';
-      li.style.background = 'transparent'; li.style.border = 'none'; li.style.cursor = 'default';
-      li.textContent = 'Лимиты не заданы. Нажмите на категорию, чтобы установить бюджет.';
+      li.className = 'empty-budget-card';
+      li.innerHTML = `
+        <div class="empty-budget-icon">🎯</div>
+        <div>
+          <div style="font-weight:600; font-size:13px; margin-bottom:2px; color:var(--text);">Лимиты бюджета не заданы</div>
+          <div style="color:var(--muted); font-size:12px; line-height:1.3;">Нажмите на любую категорию расходов ниже, чтобы установить плановый бюджет на месяц.</div>
+        </div>
+      `;
       list.appendChild(li);
       return;
     }
@@ -1887,7 +1931,7 @@ const isFirebaseConfigured = () => {
         <div class="tx-badge ${r.type}">${badgeIcon}</div>
         <div class="tx-main">
           <div class="tx-title">${escapeHtml(r.title)} (${periodMap[r.period] || r.period})</div>
-          <div class="tx-sub">${accountName(r.accountId)} · ${cat?.name || 'Без категории'}</div>
+          <div class="tx-sub">${escapeHtml(accountName(r.accountId))} · ${escapeHtml(cat?.name || 'Без категории')}</div>
         </div>
         <div class="tx-amount ${r.type}">${r.type === 'income' ? '+' : '−'} ${fmt(r.amount)}</div>
         <button class="primary pay-btn" style="padding:6px 12px; font-size:12px;">Оплатить</button>
@@ -1905,7 +1949,7 @@ const isFirebaseConfigured = () => {
           note: `Регулярный платеж: ${r.title}`
         });
         save(); render();
-        alert(`Проведён платеж «${r.title}» на сумму ${fmt(r.amount)}`);
+        showToast(`Проведён платеж «${r.title}» на сумму ${fmt(r.amount)}`, 'success', 3000);
       });
 
       li.addEventListener('click', (e) => {
@@ -2169,7 +2213,7 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
   function copyReportToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
-        alert('📋 Отчёт скопирован в буфер обмена! Перейдите в любой чат и нажмите «Вставить».');
+        showToast('📋 Отчёт скопирован в буфер обмена! Перейдите в любой чат и нажмите «Вставить».', 'success', 4000);
       }).catch(() => {
         fallbackCopyText(text);
       });
@@ -2185,8 +2229,18 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
-    alert('📋 Отчёт скопирован!');
+    showToast('📋 Отчёт скопирован!', 'success', 3000);
   }
+
+  // ---------- Collapsible Filters Toggle Listener (P2: 4.4) ----------
+  $('#btn-toggle-filters')?.addEventListener('click', () => {
+    const container = $('#filters-container');
+    if (container) {
+      container.classList.toggle('collapsed');
+      const isCollapsed = container.classList.contains('collapsed');
+      $('#btn-toggle-filters').classList.toggle('active', !isCollapsed);
+    }
+  });
 
   // ---------- Init ----------
   render();
