@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#090d16" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <title>Финансы</title>
+</head>
+<body>
+  <header class="top">
+    <div class="top-row">
+      <h1>Финансы</h1>
+      <div class="top-actions">
+        <div id="auth-box">
+          <button id="btn-google-login" class="google-btn" title="Войти через Google">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <span>Войти</span>
+          </button>
+          <div id="user-profile" class="user-profile" hidden>
+            <img id="user-avatar" class="user-avatar" src="" alt="Avatar" />
+            <button id="btn-google-logout" class="icon-btn-sm" title="Выйти из аккаунта">
+              <svg class="icon-svg sm" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+        <button id="btn-open-messenger-report" class="icon-btn" title="Отчёт для мессенджера" style="background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.4); color: var(--success);">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button id="btn-export" class="icon-btn" title="Экспорт">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button id="btn-import" class="icon-btn" title="Импорт">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
+        <input id="file-import" type="file" accept="application/json" hidden />
+      </div>
+    </div>
+    <div id="sync-status" class="sync-status offline">● Локальный режим</div>
+
+    <!-- Signature Balance Card (Spec 3.3 Option B) -->
+    <div class="balance-card">
+      <div class="balance-info">
+        <div class="balance-label">Общий баланс</div>
+        <div class="balance-value" id="total-balance">0 ₽</div>
+        <div class="balance-sub">
+          <span class="income">+ <span id="sum-income">0 ₽</span></span>
+          <span class="expense">− <span id="sum-expense">0 ₽</span></span>
+        </div>
+      </div>
+      <svg id="balance-sparkline" class="balance-sparkline" viewBox="0 0 120 54"></svg>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="tx">Операции</button>
+    <button class="tab" data-tab="accounts">Счета</button>
+    <button class="tab" data-tab="cats">Категории</button>
+    <button class="tab" data-tab="goals">Цели</button>
+    <button class="tab" data-tab="recurring">Подписки</button>
+    <button class="tab" data-tab="stats">Отчёт</button>
+  </nav>
+
+  <main class="content">
+    <!-- Транзакции -->
+    <section id="tab-tx" class="tab-panel active">
+      <div class="search-bar">
+        <svg class="icon-svg search-icon-inside" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="filter-search" type="search" placeholder="Поиск по названию или заметке..." />
+      </div>
+      <div class="filter-bar">
+        <select id="filter-account"><option value="">Все счета</option></select>
+        <select id="filter-type">
+          <option value="">Все типы</option>
+          <option value="income">Доходы</option>
+          <option value="expense">Расходы</option>
+          <option value="transfer">Переводы</option>
+        </select>
+      </div>
+      <div class="date-filter-bar">
+        <label>С <input id="filter-date-from" type="date" /></label>
+        <label>По <input id="filter-date-to" type="date" /></label>
+        <button id="btn-reset-filters" class="ghost-sm" title="Сбросить фильтры">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <button id="btn-open-bulk" class="primary-sm" style="margin-left: auto; display: inline-flex; align-items: center; gap: 4px;">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Быстрый ввод</span>
+        </button>
+      </div>
+
+      <ul id="tx-list" class="list"></ul>
+      <p id="tx-empty" class="empty">Пока нет операций. Нажмите «+», чтобы добавить.</p>
+    </section>
+
+    <!-- Счета -->
+    <section id="tab-accounts" class="tab-panel">
+      <ul id="accounts-list" class="list"></ul>
+      <button id="btn-add-account" class="secondary">+ Добавить счёт</button>
+    </section>
+
+    <!-- Категории и Бюджеты -->
+    <section id="tab-cats" class="tab-panel">
+      <h3>Бюджеты на текущий месяц</h3>
+      <ul id="cats-budget-list" class="list bars"></ul>
+
+      <h3>Расходы</h3>
+      <ul id="cats-expense" class="list chips"></ul>
+      <h3>Доходы</h3>
+      <ul id="cats-income" class="list chips"></ul>
+      <button id="btn-add-cat" class="secondary">+ Добавить категорию</button>
+    </section>
+
+    <!-- Цели и копилки -->
+    <section id="tab-goals" class="tab-panel">
+      <ul id="goals-list" class="list goals-grid"></ul>
+      <p id="goals-empty" class="empty" hidden>У вас пока нет целей накопления.</p>
+      <button id="btn-add-goal" class="secondary">+ Добавить цель накопления</button>
+    </section>
+
+    <!-- Подписки и регулярные платежи -->
+    <section id="tab-recurring" class="tab-panel">
+      <ul id="recurring-list" class="list"></ul>
+      <p id="recurring-empty" class="empty" hidden>Нет подписок и регулярных платежей.</p>
+      <button id="btn-add-recurring" class="secondary">+ Добавить регулярный платеж</button>
+    </section>
+
+    <!-- Отчёт (Spec 3.7 Donut + Line SVG Charts) -->
+    <section id="tab-stats" class="tab-panel">
+      <div class="period-bar">
+        <button data-period="month" class="period active">Месяц</button>
+        <button data-period="week" class="period">Неделя</button>
+        <button data-period="all" class="period">Всё время</button>
+      </div>
+      <div class="stat-summary">
+        <div class="stat-item"><div class="stat-label">Доходы</div><div class="stat-val income" id="stat-income">0 ₽</div></div>
+        <div class="stat-item"><div class="stat-label">Расходы</div><div class="stat-val expense" id="stat-expense">0 ₽</div></div>
+        <div class="stat-item"><div class="stat-label">Разница</div><div class="stat-val" id="stat-diff">0 ₽</div></div>
+      </div>
+
+      <div id="stat-debt-card" class="chart-card" style="margin-top: 14px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3);" hidden>
+        <h4 style="color: var(--danger); display: flex; align-items: center; gap: 6px;">
+          <span>⚠️ Долги по счетам (к возврату)</span>
+        </h4>
+        <ul id="stat-debt-list" class="list" style="margin-top: 8px;"></ul>
+      </div>
+
+      <div class="charts-grid">
+        <div id="chart-donut-card" class="chart-card">
+          <h4>Распределение расходов</h4>
+          <div id="donut-chart-container" class="donut-wrapper"></div>
+        </div>
+        <div id="chart-line-card" class="chart-card">
+          <h4>Динамика расходов</h4>
+          <div id="line-chart-container"></div>
+          <div id="line-chart-insight"></div>
+        </div>
+      </div>
+
+      <h3>По категориям (расходы)</h3>
+      <ul id="stat-cats" class="list bars"></ul>
+    </section>
+  </main>
+
+  <button id="btn-add-tx" class="fab" title="Добавить операцию">
+    <svg class="icon-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+
+  <!-- Модалка операции -->
+  <div id="modal-tx" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="modal-tx-title">Новая операция</h2>
+      <div class="seg">
+        <button data-type="expense" class="seg-btn active">Расход</button>
+        <button data-type="income" class="seg-btn">Доход</button>
+        <button data-type="transfer" class="seg-btn">Перевод</button>
+      </div>
+      <label>Сумма
+        <input id="tx-amount" type="number" step="0.01" inputmode="decimal" placeholder="0" />
+      </label>
+      <label id="field-account-from">Счёт
+        <select id="tx-account"></select>
+      </label>
+      <label id="field-account-to" style="display:none;">Счёт зачисления
+        <select id="tx-to-account"></select>
+      </label>
+      <label id="field-category">Категория
+        <select id="tx-category"></select>
+      </label>
+      <label>Дата
+        <input id="tx-date" type="date" />
+      </label>
+      <label>Комментарий
+        <input id="tx-note" type="text" placeholder="—" />
+      </label>
+      <label id="field-forgive-debt" style="display:flex; align-items:center; gap:8px; margin: 10px 0; cursor:pointer;">
+        <input id="tx-forgive-debt" type="checkbox" style="width:16px; height:16px; accent-color:var(--accent);" />
+        <span style="font-size:13px; color:var(--text);">Списать с долга (не считать долгом к возврату)</span>
+      </label>
+      <div class="modal-actions">
+        <button id="tx-delete" class="danger" hidden>Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="tx-save-next" class="secondary">Сохранить и ещё</button>
+        <button id="tx-save" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка счёта -->
+  <div id="modal-account" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="modal-account-title">Новый счёт</h2>
+      <label>Название
+        <input id="acc-name" type="text" placeholder="Карта, Наличные…" />
+      </label>
+      <label>Начальный остаток
+        <input id="acc-balance" type="number" step="0.01" inputmode="decimal" placeholder="0" />
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer;">
+        <input id="acc-exclude" type="checkbox" style="width:16px; height:16px; accent-color:var(--accent);" />
+        <span style="font-size:13px; color:var(--muted);">Не учитывать в общем балансе</span>
+      </label>
+      <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--r-sm);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+          <div>
+            <div style="font-size: 13px; font-weight: 600;">Фиксация баланса</div>
+            <div id="acc-remembered-info" style="font-size: 11px; color: var(--muted); margin-top: 2px;">Запомнит текущую сумму. Списания создадут долг к возврату.</div>
+          </div>
+          <button id="btn-remember-balance" type="button" class="secondary-sm">📌 Запомнить баланс</button>
+        </div>
+      </div>
+
+      <div id="acc-tx-section" style="margin-top: 14px;" hidden>
+        <div style="font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px;">Списания с этого счёта (управление долгом):</div>
+        <ul id="acc-tx-list" class="list" style="max-height: 200px; overflow-y: auto;"></ul>
+      </div>
+
+      <div class="modal-actions">
+        <button id="acc-delete" class="danger" hidden>Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="acc-save" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка категории -->
+  <div id="modal-cat" class="modal" hidden>
+    <div class="modal-content">
+      <h2>Категория</h2>
+      <label>Название
+        <input id="cat-name" type="text" placeholder="Продукты, Транспорт…" />
+      </label>
+      <label>Тип
+        <select id="cat-type">
+          <option value="expense">Расход</option>
+          <option value="income">Доход</option>
+        </select>
+      </label>
+      <label id="field-cat-budget">Месячный бюджет (0 — без лимита)
+        <input id="cat-budget-limit" type="number" step="100" placeholder="0" />
+      </label>
+      <label>Цвет категории
+        <div style="display:flex; align-items:center; gap:10px; margin-top:6px; flex-wrap:wrap;">
+          <input id="cat-color-input" type="color" value="#6366f1" style="width:42px; height:38px; padding:2px; cursor:pointer; border-radius:var(--r-sm); border:1px solid var(--border); background:var(--card);" />
+          <div id="cat-color-swatches" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <span class="color-swatch" data-color="#ff2a2a" title="Ярко-красный (Кредит)" style="width:24px; height:24px; border-radius:50%; background:#ff2a2a; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#3b82f6" title="Ярко-синий (Вода)" style="width:24px; height:24px; border-radius:50%; background:#3b82f6; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#6366f1" title="Индиго" style="width:24px; height:24px; border-radius:50%; background:#6366f1; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#10b981" title="Изумрудный" style="width:24px; height:24px; border-radius:50%; background:#10b981; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#f59e0b" title="Янтарный" style="width:24px; height:24px; border-radius:50%; background:#f59e0b; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#ec4899" title="Розовый" style="width:24px; height:24px; border-radius:50%; background:#ec4899; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#8b5cf6" title="Фиолетовый" style="width:24px; height:24px; border-radius:50%; background:#8b5cf6; cursor:pointer; display:inline-block;"></span>
+            <span class="color-swatch" data-color="#06b6d4" title="Бирюзовый" style="width:24px; height:24px; border-radius:50%; background:#06b6d4; cursor:pointer; display:inline-block;"></span>
+          </div>
+        </div>
+      </label>
+      <div class="modal-actions">
+        <button id="cat-delete" class="danger" hidden>Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="cat-save" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка цели (копилки) -->
+  <div id="modal-goal" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="modal-goal-title">Новая цель накопления</h2>
+      <label>Название цели
+        <input id="goal-name" type="text" placeholder="Новый телефон, Отпуск…" />
+      </label>
+      <label>Целевая сумма
+        <input id="goal-target" type="number" step="100" placeholder="100000" />
+      </label>
+      <label>Уже накоплено
+        <input id="goal-current" type="number" step="100" placeholder="0" />
+      </label>
+      <div class="modal-actions">
+        <button id="goal-delete" class="danger" hidden>Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="goal-save" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка пополнения / снятия цели -->
+  <div id="modal-goal-deposit" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="goal-deposit-title">Пополнение цели</h2>
+      <div class="seg">
+        <button data-action="deposit" class="seg-btn active">Пополнить</button>
+        <button data-action="withdraw" class="seg-btn">Снять</button>
+      </div>
+      <label>Сумма
+        <input id="goal-deposit-amount" type="number" step="0.01" placeholder="0" />
+      </label>
+      <label>Связать со счётом (создаст операцию)
+        <select id="goal-deposit-account"></select>
+      </label>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="goal-deposit-save" class="primary">Подтвердить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка регулярного платежа / подписки -->
+  <div id="modal-recurring" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="modal-recurring-title">Новый регулярный платеж</h2>
+      <label>Название
+        <input id="rec-title" type="text" placeholder="Яндекс Плюс, Аренда…" />
+      </label>
+      <div class="seg">
+        <button data-type="expense" class="seg-btn active">Расход</button>
+        <button data-type="income" class="seg-btn">Доход</button>
+      </div>
+      <label>Сумма
+        <input id="rec-amount" type="number" step="0.01" placeholder="0" />
+      </label>
+      <label>Счёт по умолчанию
+        <select id="rec-account"></select>
+      </label>
+      <label>Категория
+        <select id="rec-category"></select>
+      </label>
+      <label>Периодичность
+        <select id="rec-period">
+          <option value="month">Каждый месяц</option>
+          <option value="week">Каждую неделю</option>
+          <option value="year">Каждый год</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button id="rec-delete" class="danger" hidden>Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="rec-save" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка отчёта в мессенджер -->
+  <div id="modal-messenger-report" class="modal" hidden>
+    <div class="modal-content" style="max-width: 540px;">
+      <h2 style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+        <span>💬 Отчёт для мессенджера</span>
+      </h2>
+
+      <!-- Выбор периода и даты -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); padding: 12px; border-radius: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text);">Интервал отчёта:</span>
+          <div class="seg" style="margin: 0; width: auto;">
+            <button data-report-period="day" class="seg-btn report-period-btn active">За день</button>
+            <button data-report-period="week" class="seg-btn report-period-btn">За неделю</button>
+            <button data-report-period="month" class="seg-btn report-period-btn">За месяц</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text);">📅 Выберите дату:</span>
+          <input id="report-custom-date" type="date" style="width: auto; padding: 6px 12px; font-size: 13px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
+        </div>
+      </div>
+
+      <!-- Выбор счетов для отчета -->
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+        <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px;">💳 Счета для отображения в отчёте:</div>
+        <div id="report-accounts-selector" style="display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px;"></div>
+      </div>
+
+      <!-- Предпросмотр текста -->
+      <pre id="report-preview-text" class="report-preview" style="min-height: 200px; max-height: 280px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.4; background: rgba(0,0,0,0.35); padding: 12px; border-radius: 8px; white-space: pre-wrap; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 14px;">Загрузка отчёта...</pre>
+
+      <div class="report-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="btn-share-report" class="primary" style="flex: 1;">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span>Отправить в мессенджер</span>
+        </button>
+        <button id="btn-copy-report" class="secondary-sm">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>Скопировать</span>
+        </button>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <span class="spacer"></span>
+        <button data-close class="ghost">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка детального просмотра расходов по категории -->
+  <div id="modal-cat-details" class="modal" hidden>
+    <div class="modal-content">
+      <h2 id="cat-details-title">Расходы по категории</h2>
+      <div id="cat-details-summary" class="tx-sub" style="margin-bottom: 12px;"></div>
+      <ul id="cat-details-list" class="list"></ul>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button data-close class="primary">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка быстрого пакетного ввода -->
+  <div id="modal-bulk-tx" class="modal" hidden>
+    <div class="modal-content" style="max-width: 580px; width: 95%;">
+      <h2>⚡ Быстрый пакетный ввод</h2>
+      <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+        <label style="flex: 1; min-width: 130px; margin: 0;">Дата
+          <input id="bulk-date" type="date" />
+        </label>
+        <label style="flex: 1; min-width: 140px; margin: 0;">Основной счёт
+          <select id="bulk-account"></select>
+        </label>
+      </div>
+
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600;">Список операций за этот день:</div>
+      <div id="bulk-rows" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 4px;">
+        <!-- Динамические строки ввода -->
+      </div>
+
+      <button id="btn-add-bulk-row" class="secondary-sm" style="margin-top: 10px; width: 100%; justify-content: center;">
+        <svg class="icon-svg sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>+ Добавить ещё строчку</span>
+      </button>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <span class="spacer"></span>
+        <button data-close class="ghost">Отмена</button>
+        <button id="btn-save-bulk" class="primary">Сохранить все операции</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
