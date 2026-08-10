@@ -63,7 +63,7 @@
     <button class="tab" data-tab="accounts">Счета</button>
     <button class="tab" data-tab="cats">Категории</button>
     <button class="tab" data-tab="goals">Цели</button>
-    <button class="tab" data-tab="recurring">Подписки</button>
+    <button class="tab" data-tab="recurring">Регулярный платёж</button>
     <button class="tab" data-tab="stats">Отчёт</button>
   </nav>
 
@@ -133,10 +133,10 @@
       <button id="btn-add-goal" class="secondary">+ Добавить цель накопления</button>
     </section>
 
-    <!-- Подписки и регулярные платежи -->
+    <!-- Регулярные платежи -->
     <section id="tab-recurring" class="tab-panel">
       <ul id="recurring-list" class="list"></ul>
-      <p id="recurring-empty" class="empty" hidden>Нет подписок и регулярных платежей.</p>
+      <p id="recurring-empty" class="empty" hidden>Нет регулярных платежей.</p>
       <button id="btn-add-recurring" class="secondary">+ Добавить регулярный платеж</button>
     </section>
 
@@ -344,7 +344,7 @@
     </div>
   </div>
 
-  <!-- Модалка регулярного платежа / подписки -->
+  <!-- Модалка регулярного платежа -->
   <div id="modal-recurring" class="modal" hidden>
     <div class="modal-content">
       <h2 id="modal-recurring-title">Новый регулярный платеж</h2>
@@ -370,6 +370,9 @@
           <option value="week">Каждую неделю</option>
           <option value="year">Каждый год</option>
         </select>
+      </label>
+      <label>Комментарий
+        <input id="rec-note" type="text" placeholder="Заметка или комментарий…" />
       </label>
       <div class="modal-actions">
         <button id="rec-delete" class="danger" hidden>Удалить</button>

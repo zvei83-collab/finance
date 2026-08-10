@@ -1097,10 +1097,11 @@ const isFirebaseConfigured = () => {
   function openRecurringModal(id = null) {
     editingRecId = id;
     const r = id ? state.recurring.find(x => x.id === id) : null;
-    $('#modal-recurring-title').textContent = id ? 'Изменить подписку' : 'Новый регулярный платеж';
+    $('#modal-recurring-title').textContent = id ? 'Изменить регулярный платеж' : 'Новый регулярный платеж';
     $('#rec-title').value = r ? r.title : '';
     $('#rec-amount').value = r ? r.amount : '';
     $('#rec-period').value = r ? r.period : 'month';
+    $('#rec-note').value = r ? (r.note || '') : '';
     $('#rec-delete').hidden = !id;
     recType = r ? r.type : 'expense';
 
@@ -1131,25 +1132,26 @@ const isFirebaseConfigured = () => {
     const accountId = $('#rec-account').value;
     const categoryId = $('#rec-category').value;
     const period = $('#rec-period').value;
+    const note = $('#rec-note').value.trim();
 
     if (!title || !amount || amount <= 0) { showToast('Заполните название и сумму', 'warning'); return; }
 
     if (editingRecId) {
       const r = state.recurring.find(x => x.id === editingRecId);
-      Object.assign(r, { title, amount, type: recType, accountId, categoryId, period });
+      Object.assign(r, { title, amount, type: recType, accountId, categoryId, period, note });
     } else {
-      state.recurring.push({ id: uid(), title, amount, type: recType, accountId, categoryId, period });
+      state.recurring.push({ id: uid(), title, amount, type: recType, accountId, categoryId, period, note });
     }
     save(); closeModal('#modal-recurring'); render();
-    showToast('Подписка сохранена', 'success', 2000);
+    showToast('Регулярный платеж сохранен', 'success', 2000);
   });
 
   $('#rec-delete').addEventListener('click', () => {
     if (!editingRecId) return;
-    if (!confirm('Удалить эту подписку?')) return;
+    if (!confirm('Удалить этот регулярный платеж?')) return;
     state.recurring = state.recurring.filter(r => r.id !== editingRecId);
     save(); closeModal('#modal-recurring'); render();
-    showToast('Подписка удалена', 'info', 2000);
+    showToast('Регулярный платеж удален', 'info', 2000);
   });
 
   // ---------- Export / Import ----------
@@ -1926,12 +1928,17 @@ const isFirebaseConfigured = () => {
       const periodMap = { month: 'Ежемесячно', week: 'Еженедельно', year: 'Ежегодно' };
       const badgeIcon = SVG_ICONS[r.type] || SVG_ICONS.expense;
 
+      let subText = `${escapeHtml(accountName(r.accountId))} · ${escapeHtml(cat?.name || 'Без категории')}`;
+      if (r.note) {
+        subText += ` · ${escapeHtml(r.note)}`;
+      }
+
       const li = document.createElement('li');
       li.innerHTML = `
         <div class="tx-badge ${r.type}">${badgeIcon}</div>
         <div class="tx-main">
           <div class="tx-title">${escapeHtml(r.title)} (${periodMap[r.period] || r.period})</div>
-          <div class="tx-sub">${escapeHtml(accountName(r.accountId))} · ${escapeHtml(cat?.name || 'Без категории')}</div>
+          <div class="tx-sub">${subText}</div>
         </div>
         <div class="tx-amount ${r.type}">${r.type === 'income' ? '+' : '−'} ${fmt(r.amount)}</div>
         <button class="primary pay-btn" style="padding:6px 12px; font-size:12px;">Оплатить</button>
@@ -1939,6 +1946,7 @@ const isFirebaseConfigured = () => {
 
       li.querySelector('.pay-btn').addEventListener('click', (e) => {
         e.stopPropagation();
+        const txNote = r.note ? `Регулярный платеж: ${r.title} (${r.note})` : `Регулярный платеж: ${r.title}`;
         state.transactions.push({
           id: uid(),
           amount: r.amount,
@@ -1946,7 +1954,7 @@ const isFirebaseConfigured = () => {
           accountId: r.accountId,
           categoryId: r.categoryId,
           date: todayISO(),
-          note: `Регулярный платеж: ${r.title}`
+          note: txNote
         });
         save(); render();
         showToast(`Проведён платеж «${r.title}» на сумму ${fmt(r.amount)}`, 'success', 3000);
