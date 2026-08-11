@@ -1101,6 +1101,7 @@ const isFirebaseConfigured = () => {
     $('#rec-title').value = r ? r.title : '';
     $('#rec-amount').value = r ? r.amount : '';
     $('#rec-period').value = r ? r.period : 'month';
+    $('#rec-date').value = r && r.date ? r.date : todayISO();
     $('#rec-note').value = r ? (r.note || '') : '';
     $('#rec-delete').hidden = !id;
     recType = r ? r.type : 'expense';
@@ -1132,15 +1133,17 @@ const isFirebaseConfigured = () => {
     const accountId = $('#rec-account').value;
     const categoryId = $('#rec-category').value;
     const period = $('#rec-period').value;
+    const date = $('#rec-date').value || todayISO();
+    const day = date ? parseInt(date.split('-')[2], 10) : null;
     const note = $('#rec-note').value.trim();
 
     if (!title || !amount || amount <= 0) { showToast('Заполните название и сумму', 'warning'); return; }
 
     if (editingRecId) {
       const r = state.recurring.find(x => x.id === editingRecId);
-      Object.assign(r, { title, amount, type: recType, accountId, categoryId, period, note });
+      Object.assign(r, { title, amount, type: recType, accountId, categoryId, period, date, day, note });
     } else {
-      state.recurring.push({ id: uid(), title, amount, type: recType, accountId, categoryId, period, note });
+      state.recurring.push({ id: uid(), title, amount, type: recType, accountId, categoryId, period, date, day, note });
     }
     save(); closeModal('#modal-recurring'); render();
     showToast('Регулярный платеж сохранен', 'success', 2000);
@@ -1920,13 +1923,24 @@ const isFirebaseConfigured = () => {
   function renderRecurring() {
     const list = $('#recurring-list');
     list.innerHTML = '';
-    const items = state.recurring || [];
+    const items = [...(state.recurring || [])];
+    items.sort((a, b) => {
+      const dayA = a.date ? parseInt(a.date.split('-')[2], 10) : (a.day || 99);
+      const dayB = b.date ? parseInt(b.date.split('-')[2], 10) : (b.day || 99);
+      return dayA - dayB;
+    });
     $('#recurring-empty').hidden = items.length > 0;
 
     items.forEach(r => {
       const cat = categoryById(r.categoryId);
       const periodMap = { month: 'Ежемесячно', week: 'Еженедельно', year: 'Ежегодно' };
       const badgeIcon = SVG_ICONS[r.type] || SVG_ICONS.expense;
+
+      const dayNum = r.date ? parseInt(r.date.split('-')[2], 10) : (r.day || null);
+      let periodLabel = periodMap[r.period] || r.period;
+      if (r.period === 'month' && dayNum) {
+        periodLabel = `Каждое ${dayNum}-е число`;
+      }
 
       let subText = `${escapeHtml(accountName(r.accountId))} · ${escapeHtml(cat?.name || 'Без категории')}`;
       if (r.note) {
@@ -1937,7 +1951,7 @@ const isFirebaseConfigured = () => {
       li.innerHTML = `
         <div class="tx-badge ${r.type}">${badgeIcon}</div>
         <div class="tx-main">
-          <div class="tx-title">${escapeHtml(r.title)} (${periodMap[r.period] || r.period})</div>
+          <div class="tx-title">${escapeHtml(r.title)} (${periodLabel})</div>
           <div class="tx-sub">${subText}</div>
         </div>
         <div class="tx-amount ${r.type}">${r.type === 'income' ? '+' : '−'} ${fmt(r.amount)}</div>
