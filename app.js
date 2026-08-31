@@ -1184,6 +1184,29 @@ const isFirebaseConfigured = () => {
     e.target.value = '';
   });
 
+  // ---------- Reset / Clear Transactions & Balances ----------
+  $('#btn-clear-data')?.addEventListener('click', () => {
+    const ok = confirm('Очистить историю операций и обнулить балансы?\n\n• Все операции (транзакции) будут удалены.\n• Балансы счетов станут 0 ₽.\n• Все ваши настроенные категории и счета останутся без изменений.');
+    if (!ok) return;
+
+    // Reset transactions only
+    state.transactions = [];
+    
+    // Reset account balances to 0 while keeping account names and ids
+    if (Array.isArray(state.accounts)) {
+      state.accounts.forEach(a => { a.balance = 0; });
+    }
+
+    // Reset goal progress if needed
+    if (Array.isArray(state.goals)) {
+      state.goals.forEach(g => { g.current = 0; });
+    }
+
+    save(true);
+    render();
+    showToast('Операции очищены, балансы обнулены! Все категории сохранены.', 'success', 4000);
+  });
+
   // ---------- Search & Filters ----------
   const filters = { accountId: '', type: '', query: '', dateFrom: '', dateTo: '' };
   

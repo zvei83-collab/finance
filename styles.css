@@ -81,6 +81,8 @@ h3 { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: upp
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 .icon-btn:hover { background: var(--card-2); border-color: var(--border-hover); }
+.icon-btn.btn-danger-hover:hover { border-color: var(--danger); background: rgba(239, 68, 68, 0.12); }
+.icon-btn.btn-danger-hover:hover .icon-svg { stroke: var(--danger); }
 
 /* Auth & Sync */
 .google-btn {
