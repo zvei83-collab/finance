@@ -111,6 +111,8 @@ h3 { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: upp
 .sync-status.online { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
 .sync-status.saving { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
 .sync-status.offline { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.2); }
+.sync-status.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); cursor: pointer; transition: all 0.2s ease; }
+.sync-status.error:hover { background: rgba(239, 68, 68, 0.25); box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
 
 /* Signature Balance Card (Spec 3.3 Option B) */
 .balance-card {
@@ -671,4 +673,155 @@ input[type=number] {
   background: var(--card-hover) !important;
   border-color: var(--primary) !important;
   color: var(--primary) !important;
+}
+
+/* ---------- Reminders & Notifications Styles ---------- */
+.reminder-active-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.today-reminder-banner {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12));
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.08);
+}
+
+.reminder-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reminder-banner-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.reminder-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminder-banner-text strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.reminder-banner-text span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.reminder-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.primary-sm {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.primary-sm:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.icon-btn-xs {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.icon-btn-xs:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+/* Time Chips */
+.time-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.time-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.time-chip-del {
+  cursor: pointer;
+  color: #f87171;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+}
+
+.time-chip-del:hover {
+  color: #ef4444;
+}
+
+/* Toggle Switch Slider */
+.switch input:checked + .slider {
+  background-color: #10b981 !important;
+}
+
+.switch .slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
 }

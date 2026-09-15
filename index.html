@@ -33,6 +33,10 @@
         <button id="btn-open-messenger-report" class="icon-btn btn-report-accent" title="Сформировать отчёт для мессенджера">
           <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
+        <button id="btn-open-settings" class="icon-btn" title="Напоминания о расходах" style="position: relative;">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="reminder-active-dot" class="reminder-active-dot" hidden></span>
+        </button>
         <button id="btn-export" class="icon-btn" title="Экспорт">
           <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
@@ -73,6 +77,21 @@
   <main class="content">
     <!-- Транзакции -->
     <section id="tab-tx" class="tab-panel active">
+      <!-- Плашка-напоминание о внесении расходов за сегодня -->
+      <div id="today-reminder-banner" class="today-reminder-banner" hidden>
+        <div class="reminder-banner-content">
+          <span class="reminder-banner-icon">🔔</span>
+          <div class="reminder-banner-text">
+            <strong>Не забудьте записать расходы!</strong>
+            <span>За сегодня пока нет внесённых трат.</span>
+          </div>
+        </div>
+        <div class="reminder-banner-actions">
+          <button id="btn-reminder-add-tx" class="primary-sm">+ Внести расход</button>
+          <button id="btn-reminder-dismiss" class="icon-btn-xs" title="Скрыть напоминание на сегодня">✕</button>
+        </div>
+      </div>
+
       <div class="search-bar" style="display: flex; gap: 8px; align-items: center;">
         <div style="position: relative; flex: 1;">
           <svg class="icon-svg search-icon-inside" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -479,6 +498,111 @@
         <span class="spacer"></span>
         <button data-close class="ghost">Отмена</button>
         <button id="btn-save-bulk" class="primary">Сохранить все операции</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка диагностики БД / Firestore -->
+  <div id="modal-db-help" class="modal" hidden>
+    <div class="modal-content" style="max-width: 560px; width: 95%;">
+      <h2>🛠️ Доступ к базе данных Firestore</h2>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 12px;" id="db-help-error-text">
+        Вход в Google выполнен, но Cloud Firestore вернул ошибку доступа.
+      </p>
+      
+      <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 13px;">
+        <strong>Причина:</strong> <span id="db-help-code">В 99% случаев это правила безопасности Firestore (Security Rules) в Firebase Console.</span>
+      </div>
+
+      <div style="font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+        <div><strong>Инструкция по исправлению:</strong></div>
+        <div>1. Перейдите в <a href="https://console.firebase.google.com/" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: underline;">Firebase Console</a> и откройте проект <code>financeapp-348ec</code>.</div>
+        <div>2. В меню слева откройте <strong>Build (Сборка)</strong> &rarr; <strong>Firestore Database</strong> (если база ещё не создана, нажмите «Create database»).</div>
+        <div>3. Перейдите во вкладку <strong>Rules (Правила)</strong>.</div>
+        <div>4. Замените содержимое на правила ниже и нажмите кнопку <strong>Publish (Опубликовать)</strong>:</div>
+        <pre style="background: #0f172a; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x: auto; border: 1px solid var(--border); color: #34d399; font-family: monospace;">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}</pre>
+        <div>5. Вернитесь сюда и обновите страницу (Ctrl + R). Статус изменится на «🟢 Облако синхронизировано».</div>
+      </div>
+
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button data-close class="primary">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка настроек напоминаний -->
+  <div id="modal-settings" class="modal" hidden>
+    <div class="modal-content" style="max-width: 500px; width: 95%;">
+      <h2>🔔 Напоминания о расходах</h2>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+        Настройте напоминания, чтобы не забывать фиксировать траты в течение дня.
+      </p>
+
+      <!-- Блок Push-уведомлений -->
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;">
+          <div>
+            <div style="font-weight: 600; font-size: 14px;">Браузерные уведомления (Push)</div>
+            <div id="push-perm-status" style="font-size: 12px; color: var(--muted); margin-top: 2px;">Проверка разрешений...</div>
+          </div>
+          <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px; margin: 0;">
+            <input id="toggle-push-enabled" type="checkbox" style="opacity: 0; width: 0; height: 0;" />
+            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.2); transition: .3s; border-radius: 24px;"></span>
+          </label>
+        </div>
+        <div style="font-size: 12px; color: var(--muted); line-height: 1.4;">
+          Присылает уведомления на рабочий стол или телефон в указанное время.
+        </div>
+      </div>
+
+      <!-- Блок выбора времени -->
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">⏰ Время напоминаний:</div>
+        <div id="reminder-times-list" class="time-chips-container">
+          <!-- Динамические чипы времени -->
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+          <input id="input-new-reminder-time" type="time" value="20:00" style="width: auto; padding: 6px 12px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
+          <button id="btn-add-reminder-time" class="secondary-sm" style="height: 36px; padding: 0 12px;">+ Добавить время</button>
+        </div>
+      </div>
+
+      <!-- Блок умных опций -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+        <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; margin: 0;">
+          <input id="check-smart-reminder" type="checkbox" style="margin-top: 2px;" />
+          <div>
+            <strong>Умный режим</strong>
+            <div style="font-size: 12px; color: var(--muted);">Не беспокоить, если за сегодня уже записана хотя бы одна операция расхода.</div>
+          </div>
+        </label>
+
+        <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; margin: 0;">
+          <input id="check-in-app-reminder" type="checkbox" style="margin-top: 2px;" />
+          <div>
+            <strong>Плашка-напоминание в приложении</strong>
+            <div style="font-size: 12px; color: var(--muted);">Показывать ненавязчивое напоминание вверху списка операций, если сегодня ещё нет трат.</div>
+          </div>
+        </label>
+      </div>
+
+      <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-top: 18px; flex-wrap: wrap;">
+        <button id="btn-test-notification" class="secondary-sm" title="Отправить тестовое уведомление прямо сейчас">
+          <span>🔔 Тест уведомления</span>
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <button data-close class="ghost">Закрыть</button>
+          <button id="btn-save-settings" class="primary">Сохранить</button>
+        </div>
       </div>
     </div>
   </div>

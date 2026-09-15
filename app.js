@@ -74,7 +74,9 @@ const isFirebaseConfigured = () => {
     settings: {
       reportTime: '23:00',
       reminders: ['14:00', '21:00'],
-      pushEnabled: false
+      pushEnabled: false,
+      smartReminder: true,
+      inAppReminder: true
     }
   });
 
@@ -84,6 +86,7 @@ const isFirebaseConfigured = () => {
   }
 
   let state = load();
+  let lastDbError = null;
 
   function sanitizeState(data) {
     if (!data || typeof data !== 'object') return defaultState();
@@ -110,8 +113,10 @@ const isFirebaseConfigured = () => {
     if (!Array.isArray(data.transactions)) data.transactions = [];
     if (!Array.isArray(data.goals)) data.goals = [];
     if (!Array.isArray(data.recurring)) data.recurring = [];
-    if (!data.settings) data.settings = { reportTime: '23:00', reminders: ['14:00', '21:00'], pushEnabled: false };
+    if (!data.settings) data.settings = { reportTime: '23:00', reminders: ['14:00', '21:00'], pushEnabled: false, smartReminder: true, inAppReminder: true };
     if (!Array.isArray(data.settings.reminders)) data.settings.reminders = ['14:00', '21:00'];
+    if (data.settings.smartReminder === undefined) data.settings.smartReminder = true;
+    if (data.settings.inAppReminder === undefined) data.settings.inAppReminder = true;
 
     data.categories.forEach(c => {
       if (c.budget === undefined) c.budget = 0;
@@ -142,10 +147,19 @@ const isFirebaseConfigured = () => {
       updateSyncStatus('saving');
       const userRef = doc(db, 'users', currentUser.uid, 'data', 'mainState');
       setDoc(userRef, state)
-        .then(() => updateSyncStatus('online'))
+        .then(() => {
+          lastDbError = null;
+          updateSyncStatus('online');
+        })
         .catch(err => {
           console.warn('Cloud save failed', err);
-          updateSyncStatus('offline', 'Ошибка сохранения');
+          lastDbError = err;
+          if (err.code === 'permission-denied') {
+            showToast('⚠️ Ошибка сохранения: правила безопасности Firestore запрещают запись. Нажмите на индикатор статуса.', 'error', 7000);
+          } else {
+            showToast(`⚠️ Ошибка сохранения в облако: ${err.message || err.code || err}`, 'error', 5000);
+          }
+          updateSyncStatus('error', '🔴 Ошибка сохранения');
         });
     }
   }
@@ -321,6 +335,7 @@ const isFirebaseConfigured = () => {
               }
 
               firestoreUnsubscribe = onSnapshot(userRef, (docSnap) => {
+                lastDbError = null;
                 if (docSnap.exists()) {
                   const cloudData = docSnap.data();
                   state = sanitizeState(cloudData);
@@ -330,12 +345,21 @@ const isFirebaseConfigured = () => {
                 }
               }, (err) => {
                 console.warn('Firestore snapshot error', err);
-                updateSyncStatus('offline', 'Офлайн (Доступ к БД)');
+                lastDbError = err;
+                if (err.code === 'permission-denied') {
+                  showToast('⚠️ Ошибка Firestore: доступ запрещён правилами безопасности (Security Rules). Нажмите на индикатор статуса.', 'error', 7000);
+                } else if (err.code === 'not-found') {
+                  showToast('⚠️ Ошибка Firestore: база данных не найдена. Создайте БД в консоли Firebase.', 'error', 7000);
+                } else {
+                  showToast(`⚠️ Ошибка доступа к БД: ${err.message || err.code || err}`, 'error', 6000);
+                }
+                updateSyncStatus('error', '🔴 Офлайн (Доступ к БД)');
               });
 
             } else {
               $('#btn-google-login').hidden = false;
               $('#user-profile').hidden = true;
+              lastDbError = null;
               if (firestoreUnsubscribe) firestoreUnsubscribe();
               updateSyncStatus('offline', '● Локальный режим');
             }
@@ -357,6 +381,11 @@ const isFirebaseConfigured = () => {
     const el = $('#sync-status');
     if (!el) return;
     el.className = 'sync-status ' + mode;
+    if (mode === 'error') {
+      el.title = 'Нажмите, чтобы открыть инструкцию по исправлению ошибки базы данных';
+    } else {
+      el.removeAttribute('title');
+    }
     if (text) {
       el.textContent = text;
     } else if (mode === 'online') {
@@ -367,6 +396,24 @@ const isFirebaseConfigured = () => {
       el.textContent = '● Локальный режим';
     }
   }
+
+  $('#sync-status')?.addEventListener('click', () => {
+    if (lastDbError) {
+      const errText = $('#db-help-error-text');
+      const errCode = $('#db-help-code');
+      if (errText) {
+        errText.textContent = `Ошибка доступа к Firestore: ${lastDbError.message || lastDbError.code || 'Не удалось прочитать/записать документ'}.`;
+      }
+      if (errCode) {
+        if (lastDbError.code === 'permission-denied') {
+          errCode.textContent = 'Код ошибки: permission-denied (Отсутствуют права доступа в Security Rules Firestore).';
+        } else {
+          errCode.textContent = `Код ошибки: ${lastDbError.code || 'неизвестно'}. Проверьте статус базы данных в Firebase Console.`;
+        }
+      }
+      openModal('#modal-db-help');
+    }
+  });
 
   $('#btn-google-login').addEventListener('click', async () => {
     if (!isFirebaseConfigured()) {
@@ -1269,6 +1316,8 @@ const isFirebaseConfigured = () => {
     try {
       state = sanitizeState(state);
       renderBalance();
+      renderReminderBanner();
+      updateReminderButtonBadge();
       renderTxFilters();
       renderTx();
       renderAccounts();
@@ -2164,7 +2213,214 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
 
   // Settings & Messenger Report Modal Controls
   $('#btn-open-messenger-report')?.addEventListener('click', () => openMessengerReportModal());
-  $('#btn-open-settings')?.addEventListener('click', () => openModal('#modal-settings'));
+  $('#btn-open-settings')?.addEventListener('click', () => openSettingsModal());
+
+  // ---------- In-App Reminder Banner & Badge ----------
+  function renderReminderBanner() {
+    const banner = $('#today-reminder-banner');
+    if (!banner) return;
+
+    if (state.settings?.inAppReminder === false) {
+      banner.hidden = true;
+      return;
+    }
+
+    const today = todayISO();
+    const isDismissed = sessionStorage.getItem('finance_dismiss_reminder_' + today);
+    if (isDismissed) {
+      banner.hidden = true;
+      return;
+    }
+
+    const todayExpenses = state.transactions.filter(t => t.type === 'expense' && t.date === today);
+    if (todayExpenses.length === 0) {
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
+  }
+
+  function updateReminderButtonBadge() {
+    const dot = $('#reminder-active-dot');
+    if (!dot) return;
+    const isEnabled = Boolean(state.settings?.pushEnabled && 'Notification' in window && Notification.permission === 'granted');
+    dot.hidden = !isEnabled;
+  }
+
+  $('#btn-reminder-add-tx')?.addEventListener('click', () => {
+    openTxModal();
+  });
+
+  $('#btn-reminder-dismiss')?.addEventListener('click', () => {
+    sessionStorage.setItem('finance_dismiss_reminder_' + todayISO(), '1');
+    const banner = $('#today-reminder-banner');
+    if (banner) banner.hidden = true;
+    showToast('Напоминание скрыто на сегодня', 'info', 2500);
+  });
+
+  // ---------- Reminders Settings Modal Logic ----------
+  let tempReminders = [];
+
+  function openSettingsModal() {
+    if (!state.settings) state.settings = {};
+    tempReminders = Array.isArray(state.settings.reminders) ? [...state.settings.reminders] : ['14:00', '21:00'];
+
+    const togglePush = $('#toggle-push-enabled');
+    const checkSmart = $('#check-smart-reminder');
+    const checkInApp = $('#check-in-app-reminder');
+
+    if (togglePush) togglePush.checked = Boolean(state.settings.pushEnabled);
+    if (checkSmart) checkSmart.checked = state.settings.smartReminder !== false;
+    if (checkInApp) checkInApp.checked = state.settings.inAppReminder !== false;
+
+    updatePushPermStatus();
+    renderReminderTimesChips();
+    openModal('#modal-settings');
+  }
+
+  function updatePushPermStatus() {
+    const statusEl = $('#push-perm-status');
+    if (!statusEl) return;
+    if (!('Notification' in window)) {
+      statusEl.innerHTML = '<span style="color: #f87171;">❌ Не поддерживается браузером</span>';
+      return;
+    }
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+      statusEl.innerHTML = '<span style="color: #34d399;">🟢 Разрешено браузером</span>';
+    } else if (perm === 'denied') {
+      statusEl.innerHTML = '<span style="color: #f87171;">🔴 Заблокировано в настройках сайта</span>';
+    } else {
+      statusEl.innerHTML = '<span style="color: #fbbf24;">🟡 Требуется подтверждение</span>';
+    }
+  }
+
+  function renderReminderTimesChips() {
+    const list = $('#reminder-times-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (tempReminders.length === 0) {
+      list.innerHTML = '<span style="font-size:12px; color:var(--muted); font-style:italic;">Напоминания отключены (список пуст)</span>';
+      return;
+    }
+    tempReminders.sort().forEach(time => {
+      const chip = document.createElement('span');
+      chip.className = 'time-chip';
+      chip.innerHTML = `<span>⏰ ${time}</span><button class="time-chip-del" title="Удалить время">&times;</button>`;
+      chip.querySelector('button').addEventListener('click', () => {
+        tempReminders = tempReminders.filter(t => t !== time);
+        renderReminderTimesChips();
+      });
+      list.appendChild(chip);
+    });
+  }
+
+  $('#btn-add-reminder-time')?.addEventListener('click', () => {
+    const input = $('#input-new-reminder-time');
+    const timeVal = input?.value;
+    if (!timeVal) return;
+    if (!tempReminders.includes(timeVal)) {
+      tempReminders.push(timeVal);
+      renderReminderTimesChips();
+    } else {
+      showToast('Это время уже есть в списке', 'info', 2500);
+    }
+  });
+
+  $('#toggle-push-enabled')?.addEventListener('change', async (e) => {
+    if (e.target.checked) {
+      if (!('Notification' in window)) {
+        showToast('Ваш браузер не поддерживает Push-уведомления.', 'warning');
+        e.target.checked = false;
+        return;
+      }
+      if (Notification.permission !== 'granted') {
+        try {
+          const perm = await Notification.requestPermission();
+          updatePushPermStatus();
+          if (perm === 'granted') {
+            showToast('✓ Уведомления успешно включены!', 'success');
+          } else {
+            showToast('Разрешение отклонено браузером. Разрешите уведомления в настройках сайта.', 'warning', 6000);
+            e.target.checked = false;
+          }
+        } catch (err) {
+          console.warn(err);
+          e.target.checked = false;
+        }
+      }
+    }
+  });
+
+  $('#btn-save-settings')?.addEventListener('click', () => {
+    if (!state.settings) state.settings = {};
+    state.settings.pushEnabled = Boolean($('#toggle-push-enabled')?.checked);
+    state.settings.smartReminder = Boolean($('#check-smart-reminder')?.checked);
+    state.settings.inAppReminder = Boolean($('#check-in-app-reminder')?.checked);
+    state.settings.reminders = [...tempReminders];
+
+    save();
+    showToast('✓ Настройки напоминаний сохранены', 'success');
+    closeModal('#modal-settings');
+    render();
+    startReminderScheduler();
+  });
+
+  $('#btn-test-notification')?.addEventListener('click', async () => {
+    if (!('Notification' in window)) {
+      showToast('Браузер не поддерживает уведомления.', 'error');
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      const perm = await Notification.requestPermission();
+      updatePushPermStatus();
+      if (perm !== 'granted') {
+        showToast('Уведомления заблокированы в настройках браузера.', 'warning');
+        return;
+      }
+    }
+    sendPushNotification('🔔 Тестовое напоминание', 'Отлично! Напоминания о расходах работают исправно.');
+    showToast('Тестовое уведомление отправлено!', 'success');
+  });
+
+  // ---------- Reminder Background Scheduler ----------
+  let reminderInterval = null;
+  function startReminderScheduler() {
+    if (reminderInterval) clearInterval(reminderInterval);
+
+    function checkReminders() {
+      if (!state.settings?.pushEnabled) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const currentTime = `${hh}:${mm}`;
+
+      const reminders = state.settings.reminders || [];
+      if (reminders.includes(currentTime)) {
+        const today = todayISO();
+        const sentKey = `finance_reminded_${today}_${currentTime}`;
+        if (localStorage.getItem(sentKey)) return;
+
+        const todayExpenses = state.transactions.filter(t => t.type === 'expense' && t.date === today);
+        if (state.settings.smartReminder && todayExpenses.length > 0) {
+          return;
+        }
+
+        localStorage.setItem(sentKey, '1');
+        const count = todayExpenses.length;
+        const body = count === 0
+          ? 'Вы ещё не внесли сегодняшние расходы. Самое время зафиксировать чеки и траты! 📝'
+          : `Сегодня записано расходов: ${count}. Были ли ещё траты? 💳`;
+
+        sendPushNotification('🔔 Финансовое напоминание', body);
+      }
+    }
+
+    reminderInterval = setInterval(checkReminders, 40000);
+    checkReminders();
+  }
 
   function openMessengerReportModal() {
     const dateInput = $('#report-custom-date');
@@ -2292,6 +2548,7 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
   // ---------- Init ----------
   render();
   ensureFirebaseLoaded();
+  startReminderScheduler();
 
   // Service worker
   if ('serviceWorker' in navigator) {
