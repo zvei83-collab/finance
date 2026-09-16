@@ -165,11 +165,18 @@ const isFirebaseConfigured = () => {
   }
 
   // ---------- Helpers ----------
-  const todayISO = () => new Date().toISOString().slice(0, 10);
+  const formatLocalDateISO = (d) => {
+    if (!d || isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const todayISO = () => formatLocalDateISO(new Date());
   const yesterdayISO = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return formatLocalDateISO(d);
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -2084,7 +2091,39 @@ const isFirebaseConfigured = () => {
     return dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
-  function generateDailyReportText(targetDateIso, periodType = 'day') {
+  function formatDaysCount(n) {
+    const abs = Math.abs(n) % 100;
+    const num = abs % 10;
+    if (abs > 10 && abs < 20) return `${n} дней`;
+    if (num > 1 && num < 5) return `${n} дня`;
+    if (num === 1) return `${n} день`;
+    return `${n} дней`;
+  }
+
+  function formatReportDateRange(startIso, endIso) {
+    if (!startIso || !endIso) return '';
+    const startParts = startIso.split('-').map(Number);
+    const endParts = endIso.split('-').map(Number);
+    const startD = new Date(startParts[0], (startParts[1] || 1) - 1, startParts[2] || 1);
+    const endD = new Date(endParts[0], (endParts[1] || 1) - 1, endParts[2] || 1);
+    const now = new Date();
+
+    if (startIso === endIso) {
+      return formatFullDate(endIso);
+    }
+
+    if (startParts[0] === endParts[0]) {
+      const s = startD.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      const e = endD.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      return `${s} — ${e}`;
+    } else {
+      const s = startD.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      const e = endD.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      return `${s} — ${e}`;
+    }
+  }
+
+  function generateDailyReportText(targetDateIso, periodType = 'day', customOptions = {}) {
     let reportDate = targetDateIso || yesterdayISO();
     if (typeof reportDate !== 'string' || !reportDate.includes('-')) {
       reportDate = yesterdayISO();
@@ -2103,9 +2142,40 @@ const isFirebaseConfigured = () => {
         const startD = new Date(endD);
         startD.setDate(endD.getDate() - 6);
 
-        const startIso = startD.getFullYear() + '-' + String(startD.getMonth() + 1).padStart(2, '0') + '-' + String(startD.getDate()).padStart(2, '0');
+        const startIso = formatLocalDateISO(startD);
         filteredTxs = allTxs.filter(t => t && t.date >= startIso && t.date <= reportDate);
-        periodHeader = `неделю (${formatDate(startIso)} — ${formatDate(reportDate)})`;
+        periodHeader = `неделю (${formatReportDateRange(startIso, reportDate)})`;
+      } else if (periodType === 'custom') {
+        let startIso = customOptions.startDate;
+        let endIso = customOptions.endDate || reportDate;
+
+        if (!startIso) {
+          const days = Math.max(1, parseInt(customOptions.days, 10) || 1);
+          const parts = endIso.split('-').map(Number);
+          const endD = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+          const startD = new Date(endD);
+          startD.setDate(endD.getDate() - (days - 1));
+          startIso = formatLocalDateISO(startD);
+        }
+
+        if (startIso > endIso) {
+          const tmp = startIso;
+          startIso = endIso;
+          endIso = tmp;
+        }
+
+        const startParts = startIso.split('-').map(Number);
+        const endParts = endIso.split('-').map(Number);
+        const startD = new Date(startParts[0], (startParts[1] || 1) - 1, startParts[2] || 1);
+        const endD = new Date(endParts[0], (endParts[1] || 1) - 1, endParts[2] || 1);
+        const daysCount = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+
+        filteredTxs = allTxs.filter(t => t && t.date >= startIso && t.date <= endIso);
+        if (daysCount === 1) {
+          periodHeader = `1 день (${formatFullDate(endIso)})`;
+        } else {
+          periodHeader = `${formatDaysCount(daysCount)} (${formatReportDateRange(startIso, endIso)})`;
+        }
       } else if (periodType === 'month') {
         const parts = reportDate.split('-').map(Number);
         const year = parts[0] || new Date().getFullYear();
@@ -2426,7 +2496,12 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
     const dateInput = $('#report-custom-date');
     if (dateInput && !dateInput.value) dateInput.value = yesterdayISO();
 
+    const endInput = $('#report-range-end');
+    if (endInput && !endInput.value) endInput.value = todayISO();
+    syncCustomPeriodDatesFromDays(parseInt($('#report-custom-days')?.value, 10) || 10);
+
     renderReportAccountSelector();
+    updateReportPeriodUI();
     updateReportPreview();
     openModal('#modal-messenger-report');
   }
@@ -2467,18 +2542,113 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
 
   let currentReportPeriod = 'day';
 
+  function getCurrentReportText() {
+    const selectedDate = $('#report-custom-date')?.value || yesterdayISO();
+    const customDays = parseInt($('#report-custom-days')?.value, 10) || 10;
+    const customStart = $('#report-range-start')?.value || '';
+    const customEnd = $('#report-range-end')?.value || selectedDate;
+    return generateDailyReportText(selectedDate, currentReportPeriod, {
+      days: customDays,
+      startDate: customStart,
+      endDate: customEnd
+    });
+  }
+
   function updateReportPreview() {
     const preview = $('#report-preview-text');
-    const selectedDate = $('#report-custom-date')?.value || yesterdayISO();
     if (preview) {
-      preview.textContent = generateDailyReportText(selectedDate, currentReportPeriod);
+      preview.textContent = getCurrentReportText();
     }
+  }
+
+  function updateReportPeriodUI() {
+    const singleBox = $('#report-single-date-box');
+    const customBox = $('#report-custom-period-box');
+    const singleLabel = $('#report-single-date-label');
+    const singleInput = $('#report-custom-date');
+
+    if (currentReportPeriod === 'custom') {
+      if (singleBox) singleBox.style.display = 'none';
+      if (customBox) customBox.style.display = 'flex';
+
+      const endInput = $('#report-range-end');
+      if (endInput && !endInput.value) {
+        endInput.value = singleInput?.value || todayISO();
+      }
+      const days = parseInt($('#report-custom-days')?.value, 10) || 10;
+      syncCustomPeriodDatesFromDays(days);
+    } else {
+      if (singleBox) singleBox.style.display = 'flex';
+      if (customBox) customBox.style.display = 'none';
+
+      if (singleLabel) {
+        if (currentReportPeriod === 'week') {
+          singleLabel.textContent = '📅 Дата окончания недели:';
+        } else if (currentReportPeriod === 'month') {
+          singleLabel.textContent = '📅 Месяц (выберите дату):';
+        } else {
+          singleLabel.textContent = '📅 Выберите дату:';
+        }
+      }
+    }
+  }
+
+  function syncCustomPeriodDatesFromDays(days) {
+    const endInput = $('#report-range-end');
+    const startInput = $('#report-range-start');
+    if (!endInput || !startInput) return;
+
+    let endIso = endInput.value || todayISO();
+    endInput.value = endIso;
+
+    const parts = endIso.split('-').map(Number);
+    const endD = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+    const startD = new Date(endD);
+    startD.setDate(endD.getDate() - (Math.max(1, days) - 1));
+
+    startInput.value = formatLocalDateISO(startD);
+
+    $$('.report-chip-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.days, 10) === days);
+    });
+  }
+
+  function syncCustomPeriodDaysFromDates() {
+    const endInput = $('#report-range-end');
+    const startInput = $('#report-range-start');
+    const daysInput = $('#report-custom-days');
+    if (!endInput || !startInput || !daysInput) return;
+
+    let startIso = startInput.value;
+    let endIso = endInput.value;
+    if (!startIso || !endIso) return;
+
+    if (startIso > endIso) {
+      const tmp = startIso;
+      startIso = endIso;
+      endIso = tmp;
+      startInput.value = startIso;
+      endInput.value = endIso;
+    }
+
+    const startParts = startIso.split('-').map(Number);
+    const endParts = endIso.split('-').map(Number);
+    const startD = new Date(startParts[0], (startParts[1] || 1) - 1, startParts[2] || 1);
+    const endD = new Date(endParts[0], (endParts[1] || 1) - 1, endParts[2] || 1);
+    const diffDays = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
+
+    daysInput.value = diffDays;
+
+    $$('.report-chip-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.days, 10) === diffDays);
+    });
   }
 
   $$('.report-period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       currentReportPeriod = btn.dataset.reportPeriod || 'day';
       $$('.report-period-btn').forEach(b => b.classList.toggle('active', b === btn));
+      updateReportPeriodUI();
       updateReportPreview();
     });
   });
@@ -2487,9 +2657,38 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
     updateReportPreview();
   });
 
+  $('#report-custom-days')?.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val > 0) {
+      syncCustomPeriodDatesFromDays(val);
+      updateReportPreview();
+    }
+  });
+
+  $$('.report-chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.dataset.days, 10);
+      if (days > 0) {
+        const daysInput = $('#report-custom-days');
+        if (daysInput) daysInput.value = days;
+        syncCustomPeriodDatesFromDays(days);
+        updateReportPreview();
+      }
+    });
+  });
+
+  $('#report-range-start')?.addEventListener('change', () => {
+    syncCustomPeriodDaysFromDates();
+    updateReportPreview();
+  });
+
+  $('#report-range-end')?.addEventListener('change', () => {
+    syncCustomPeriodDaysFromDates();
+    updateReportPreview();
+  });
+
   $('#btn-share-report')?.addEventListener('click', async () => {
-    const selectedDate = $('#report-custom-date')?.value || yesterdayISO();
-    const text = generateDailyReportText(selectedDate, currentReportPeriod);
+    const text = getCurrentReportText();
     if (navigator.share) {
       try {
         await navigator.share({
@@ -2507,8 +2706,7 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
   });
 
   $('#btn-copy-report')?.addEventListener('click', () => {
-    const selectedDate = $('#report-custom-date')?.value || yesterdayISO();
-    copyReportToClipboard(generateDailyReportText(selectedDate, currentReportPeriod));
+    copyReportToClipboard(getCurrentReportText());
   });
 
   function copyReportToClipboard(text) {

@@ -1,4 +1,4 @@
-const CACHE = 'finance-pwa-v51';
+const CACHE = 'finance-pwa-v52';
 const ASSETS = [
   './',
   './index.html',
