@@ -2146,17 +2146,8 @@ const isFirebaseConfigured = () => {
         filteredTxs = allTxs.filter(t => t && t.date >= startIso && t.date <= reportDate);
         periodHeader = `неделю (${formatReportDateRange(startIso, reportDate)})`;
       } else if (periodType === 'custom') {
-        let startIso = customOptions.startDate;
+        let startIso = customOptions.startDate || reportDate;
         let endIso = customOptions.endDate || reportDate;
-
-        if (!startIso) {
-          const days = Math.max(1, parseInt(customOptions.days, 10) || 1);
-          const parts = endIso.split('-').map(Number);
-          const endD = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
-          const startD = new Date(endD);
-          startD.setDate(endD.getDate() - (days - 1));
-          startIso = formatLocalDateISO(startD);
-        }
 
         if (startIso > endIso) {
           const tmp = startIso;
@@ -2164,17 +2155,11 @@ const isFirebaseConfigured = () => {
           endIso = tmp;
         }
 
-        const startParts = startIso.split('-').map(Number);
-        const endParts = endIso.split('-').map(Number);
-        const startD = new Date(startParts[0], (startParts[1] || 1) - 1, startParts[2] || 1);
-        const endD = new Date(endParts[0], (endParts[1] || 1) - 1, endParts[2] || 1);
-        const daysCount = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
-
         filteredTxs = allTxs.filter(t => t && t.date >= startIso && t.date <= endIso);
-        if (daysCount === 1) {
-          periodHeader = `1 день (${formatFullDate(endIso)})`;
+        if (startIso === endIso) {
+          periodHeader = `период (${formatFullDate(endIso)})`;
         } else {
-          periodHeader = `${formatDaysCount(daysCount)} (${formatReportDateRange(startIso, endIso)})`;
+          periodHeader = `период (${formatReportDateRange(startIso, endIso)})`;
         }
       } else if (periodType === 'month') {
         const parts = reportDate.split('-').map(Number);
@@ -2498,7 +2483,12 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
 
     const endInput = $('#report-range-end');
     if (endInput && !endInput.value) endInput.value = todayISO();
-    syncCustomPeriodDatesFromDays(parseInt($('#report-custom-days')?.value, 10) || 10);
+    const startInput = $('#report-range-start');
+    if (startInput && !startInput.value) {
+      const d = new Date();
+      d.setDate(d.getDate() - 6);
+      startInput.value = formatLocalDateISO(d);
+    }
 
     renderReportAccountSelector();
     updateReportPeriodUI();
@@ -2544,11 +2534,9 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
 
   function getCurrentReportText() {
     const selectedDate = $('#report-custom-date')?.value || yesterdayISO();
-    const customDays = parseInt($('#report-custom-days')?.value, 10) || 10;
     const customStart = $('#report-range-start')?.value || '';
     const customEnd = $('#report-range-end')?.value || selectedDate;
     return generateDailyReportText(selectedDate, currentReportPeriod, {
-      days: customDays,
       startDate: customStart,
       endDate: customEnd
     });
@@ -2575,8 +2563,12 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
       if (endInput && !endInput.value) {
         endInput.value = singleInput?.value || todayISO();
       }
-      const days = parseInt($('#report-custom-days')?.value, 10) || 10;
-      syncCustomPeriodDatesFromDays(days);
+      const startInput = $('#report-range-start');
+      if (startInput && !startInput.value) {
+        const d = new Date();
+        d.setDate(d.getDate() - 6);
+        startInput.value = formatLocalDateISO(d);
+      }
     } else {
       if (singleBox) singleBox.style.display = 'flex';
       if (customBox) customBox.style.display = 'none';
@@ -2593,57 +2585,6 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
     }
   }
 
-  function syncCustomPeriodDatesFromDays(days) {
-    const endInput = $('#report-range-end');
-    const startInput = $('#report-range-start');
-    if (!endInput || !startInput) return;
-
-    let endIso = endInput.value || todayISO();
-    endInput.value = endIso;
-
-    const parts = endIso.split('-').map(Number);
-    const endD = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
-    const startD = new Date(endD);
-    startD.setDate(endD.getDate() - (Math.max(1, days) - 1));
-
-    startInput.value = formatLocalDateISO(startD);
-
-    $$('.report-chip-btn').forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.days, 10) === days);
-    });
-  }
-
-  function syncCustomPeriodDaysFromDates() {
-    const endInput = $('#report-range-end');
-    const startInput = $('#report-range-start');
-    const daysInput = $('#report-custom-days');
-    if (!endInput || !startInput || !daysInput) return;
-
-    let startIso = startInput.value;
-    let endIso = endInput.value;
-    if (!startIso || !endIso) return;
-
-    if (startIso > endIso) {
-      const tmp = startIso;
-      startIso = endIso;
-      endIso = tmp;
-      startInput.value = startIso;
-      endInput.value = endIso;
-    }
-
-    const startParts = startIso.split('-').map(Number);
-    const endParts = endIso.split('-').map(Number);
-    const startD = new Date(startParts[0], (startParts[1] || 1) - 1, startParts[2] || 1);
-    const endD = new Date(endParts[0], (endParts[1] || 1) - 1, endParts[2] || 1);
-    const diffDays = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
-
-    daysInput.value = diffDays;
-
-    $$('.report-chip-btn').forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.days, 10) === diffDays);
-    });
-  }
-
   $$('.report-period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       currentReportPeriod = btn.dataset.reportPeriod || 'day';
@@ -2657,33 +2598,11 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
     updateReportPreview();
   });
 
-  $('#report-custom-days')?.addEventListener('input', (e) => {
-    const val = parseInt(e.target.value, 10);
-    if (!isNaN(val) && val > 0) {
-      syncCustomPeriodDatesFromDays(val);
-      updateReportPreview();
-    }
-  });
-
-  $$('.report-chip-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const days = parseInt(btn.dataset.days, 10);
-      if (days > 0) {
-        const daysInput = $('#report-custom-days');
-        if (daysInput) daysInput.value = days;
-        syncCustomPeriodDatesFromDays(days);
-        updateReportPreview();
-      }
-    });
-  });
-
   $('#report-range-start')?.addEventListener('change', () => {
-    syncCustomPeriodDaysFromDates();
     updateReportPreview();
   });
 
   $('#report-range-end')?.addEventListener('change', () => {
-    syncCustomPeriodDaysFromDates();
     updateReportPreview();
   });
 

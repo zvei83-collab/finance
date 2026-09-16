@@ -423,7 +423,7 @@
             <button data-report-period="day" class="seg-btn report-period-btn active">За день</button>
             <button data-report-period="week" class="seg-btn report-period-btn">За неделю</button>
             <button data-report-period="month" class="seg-btn report-period-btn">За месяц</button>
-            <button data-report-period="custom" class="seg-btn report-period-btn">Свой период</button>
+            <button data-report-period="custom" class="seg-btn report-period-btn">За период</button>
           </div>
         </div>
 
@@ -434,35 +434,15 @@
         </div>
 
         <!-- Настраиваемый период (для 'custom') -->
-        <div id="report-custom-period-box" style="display: none; flex-direction: column; gap: 10px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.1);">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-            <span style="font-size: 13px; font-weight: 600; color: var(--text);">🔢 За сколько дней:</span>
+        <div id="report-custom-period-box" style="display: none; flex-direction: column; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.1);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: rgba(0, 0, 0, 0.2); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05);">
             <div style="display: flex; align-items: center; gap: 6px;">
-              <input id="report-custom-days" type="number" min="1" max="365" value="10" style="width: 70px; text-align: center; padding: 6px 8px; font-size: 13px; font-weight: 600; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
-              <span style="font-size: 13px; color: var(--muted);">дн.</span>
-            </div>
-          </div>
-
-          <!-- Быстрый выбор дней -->
-          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-            <span style="font-size: 11px; color: var(--muted); margin-right: 2px;">Быстро:</span>
-            <button type="button" class="report-chip-btn" data-days="3">3 дня</button>
-            <button type="button" class="report-chip-btn" data-days="7">7 дней</button>
-            <button type="button" class="report-chip-btn active" data-days="10">10 дней</button>
-            <button type="button" class="report-chip-btn" data-days="14">14 дней</button>
-            <button type="button" class="report-chip-btn" data-days="26">26 дней</button>
-            <button type="button" class="report-chip-btn" data-days="30">30 дней</button>
-          </div>
-
-          <!-- Выбор дат диапазона -->
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: rgba(0, 0, 0, 0.2); padding: 8px 10px; border-radius: 6px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 12px; color: var(--muted); font-weight: 600;">С:</span>
-              <input id="report-range-start" type="date" style="width: auto; padding: 5px 8px; font-size: 12px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
+              <span style="font-size: 13px; color: var(--muted); font-weight: 600;">С:</span>
+              <input id="report-range-start" type="date" style="width: auto; padding: 6px 10px; font-size: 13px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 12px; color: var(--muted); font-weight: 600;">По:</span>
-              <input id="report-range-end" type="date" style="width: auto; padding: 5px 8px; font-size: 12px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
+              <span style="font-size: 13px; color: var(--muted); font-weight: 600;">По:</span>
+              <input id="report-range-end" type="date" style="width: auto; padding: 6px 10px; font-size: 13px; margin: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px;" />
             </div>
           </div>
         </div>
