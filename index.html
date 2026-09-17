@@ -165,9 +165,64 @@
     <!-- Отчёт (Spec 3.7 Donut + Line SVG Charts) -->
     <section id="tab-stats" class="tab-panel">
       <div class="period-bar">
-        <button data-period="month" class="period active">Месяц</button>
+        <button data-period="day" class="period">День</button>
         <button data-period="week" class="period">Неделя</button>
-        <button data-period="all" class="period">Всё время</button>
+        <button data-period="month" class="period active">Месяц</button>
+        <button data-period="year" class="period">Год</button>
+        <button data-period="all" class="period">Общий</button>
+      </div>
+
+      <div id="stat-period-nav" class="stat-period-nav">
+        <button id="btn-stat-prev" class="stat-nav-btn" type="button" title="Предыдущий период">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+
+        <div class="stat-nav-display">
+          <!-- День -->
+          <div id="stat-nav-day" class="stat-nav-item" style="display: none;">
+            <button type="button" id="stat-label-day-btn" class="stat-nav-label" title="Нажмите, чтобы выбрать дату">
+              <svg class="icon-svg sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="stat-label-day">Сегодня</span>
+            </button>
+            <input id="stat-input-day" type="date" class="stat-nav-hidden-input" />
+          </div>
+
+          <!-- Неделя -->
+          <div id="stat-nav-week" class="stat-nav-item" style="display: none;">
+            <button type="button" id="stat-label-week-btn" class="stat-nav-label" title="Нажмите, чтобы выбрать неделю">
+              <svg class="icon-svg sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="stat-label-week">Неделя</span>
+            </button>
+            <input id="stat-input-week" type="date" class="stat-nav-hidden-input" />
+          </div>
+
+          <!-- Месяц -->
+          <div id="stat-nav-month" class="stat-nav-item">
+            <button type="button" id="stat-label-month-btn" class="stat-nav-label" title="Нажмите, чтобы выбрать месяц">
+              <svg class="icon-svg sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="stat-label-month">Месяц</span>
+            </button>
+            <input id="stat-input-month" type="month" class="stat-nav-hidden-input" />
+          </div>
+
+          <!-- Год -->
+          <div id="stat-nav-year" class="stat-nav-item" style="display: none;">
+            <button type="button" id="stat-label-year-btn" class="stat-nav-label" title="Нажмите, чтобы выбрать год">
+              <svg class="icon-svg sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="stat-label-year">Год</span>
+            </button>
+            <select id="stat-select-year" class="stat-nav-hidden-input"></select>
+          </div>
+
+          <!-- Общий -->
+          <div id="stat-nav-all" class="stat-nav-item" style="display: none;">
+            <span class="stat-nav-text">📊 Все операции за всё время</span>
+          </div>
+        </div>
+
+        <button id="btn-stat-next" class="stat-nav-btn" type="button" title="Следующий период">
+          <svg class="icon-svg sm" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
       </div>
       <div class="stat-summary">
         <div class="stat-item"><div class="stat-label">Доходы</div><div class="stat-val income" id="stat-income">0 ₽</div></div>

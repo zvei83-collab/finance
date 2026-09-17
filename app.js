@@ -1282,37 +1282,244 @@ const isFirebaseConfigured = () => {
 
   // ---------- Period (Stats) ----------
   let period = 'month';
+  let statDay = todayISO();
+  let statWeekRefDate = new Date();
+  let statMonth = todayISO().slice(0, 7);
+  let statYear = new Date().getFullYear();
+
+  function getStatWeekRange() {
+    const d = statWeekRefDate instanceof Date && !isNaN(statWeekRefDate.getTime()) ? statWeekRefDate : new Date();
+    const day = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
+    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+    return {
+      startIso: formatLocalDateISO(mon),
+      endIso: formatLocalDateISO(sun),
+      monDate: mon,
+      sunDate: sun
+    };
+  }
+
+  function getStatDayLabel() {
+    if (!statDay || typeof statDay !== 'string') statDay = todayISO();
+    const parts = statDay.split('-').map(Number);
+    const d = new Date(parts[0], (parts[1] || 1) - 1, parts[2] || 1);
+    const today = todayISO();
+    const yest = yesterdayISO();
+    let prefix = '';
+    if (statDay === today) prefix = 'Сегодня, ';
+    else if (statDay === yest) prefix = 'Вчера, ';
+    return prefix + d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function getStatWeekLabel() {
+    const range = getStatWeekRange();
+    const m = range.monDate;
+    const s = range.sunDate;
+    const now = new Date();
+    const startStr = m.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    const endStr = s.toLocaleDateString('ru-RU', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: m.getFullYear() === now.getFullYear() && s.getFullYear() === now.getFullYear() ? undefined : 'numeric' 
+    });
+    return `${startStr} — ${endStr}`;
+  }
+
+  function getStatMonthLabel() {
+    if (!statMonth || typeof statMonth !== 'string') statMonth = todayISO().slice(0, 7);
+    const parts = statMonth.split('-').map(Number);
+    const d = new Date(parts[0], (parts[1] || 1) - 1, 1);
+    const name = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  function getStatYearLabel() {
+    if (!statYear || isNaN(statYear)) statYear = new Date().getFullYear();
+    return `${statYear} год`;
+  }
+
+  function populateYearSelect() {
+    const sel = $('#stat-select-year');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const currentY = new Date().getFullYear();
+    let minY = currentY - 5;
+    let maxY = currentY + 1;
+    (state.transactions || []).forEach(t => {
+      if (t.date) {
+        const y = parseInt(t.date.slice(0, 4), 10);
+        if (y && y < minY) minY = y;
+        if (y && y > maxY) maxY = y;
+      }
+    });
+    for (let y = maxY; y >= minY; y--) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = `${y} год`;
+      if (y === statYear) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  function triggerPicker(input) {
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch (err) {}
+    }
+    input.focus();
+    input.click();
+  }
+
+  function updateStatPeriodUI() {
+    $$('.period').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+
+    const navDay = $('#stat-nav-day');
+    const navWeek = $('#stat-nav-week');
+    const navMonth = $('#stat-nav-month');
+    const navYear = $('#stat-nav-year');
+    const navAll = $('#stat-nav-all');
+
+    if (navDay) navDay.style.display = period === 'day' ? 'flex' : 'none';
+    if (navWeek) navWeek.style.display = period === 'week' ? 'flex' : 'none';
+    if (navMonth) navMonth.style.display = period === 'month' ? 'flex' : 'none';
+    if (navYear) navYear.style.display = period === 'year' ? 'flex' : 'none';
+    if (navAll) navAll.style.display = period === 'all' ? 'flex' : 'none';
+
+    if (period === 'day') {
+      const lbl = $('#stat-label-day');
+      if (lbl) lbl.textContent = getStatDayLabel();
+      const inp = $('#stat-input-day');
+      if (inp) inp.value = statDay;
+    } else if (period === 'week') {
+      const lbl = $('#stat-label-week');
+      if (lbl) lbl.textContent = getStatWeekLabel();
+      const inp = $('#stat-input-week');
+      if (inp) inp.value = formatLocalDateISO(statWeekRefDate);
+    } else if (period === 'month') {
+      const lbl = $('#stat-label-month');
+      if (lbl) lbl.textContent = getStatMonthLabel();
+      const inp = $('#stat-input-month');
+      if (inp) inp.value = statMonth;
+    } else if (period === 'year') {
+      const lbl = $('#stat-label-year');
+      if (lbl) lbl.textContent = getStatYearLabel();
+      populateYearSelect();
+      const sel = $('#stat-select-year');
+      if (sel) sel.value = statYear;
+    }
+
+    const btnPrev = $('#btn-stat-prev');
+    const btnNext = $('#btn-stat-next');
+    if (btnPrev) btnPrev.style.visibility = period === 'all' ? 'hidden' : 'visible';
+    if (btnNext) btnNext.style.visibility = period === 'all' ? 'hidden' : 'visible';
+  }
+
   $$('.period').forEach(btn => {
     btn.addEventListener('click', () => {
       period = btn.dataset.period;
-      $$('.period').forEach(b => b.classList.toggle('active', b === btn));
+      updateStatPeriodUI();
       renderStats();
     });
+  });
+
+  $('#stat-label-day-btn')?.addEventListener('click', () => triggerPicker($('#stat-input-day')));
+  $('#stat-label-week-btn')?.addEventListener('click', () => triggerPicker($('#stat-input-week')));
+  $('#stat-label-month-btn')?.addEventListener('click', () => triggerPicker($('#stat-input-month')));
+  $('#stat-label-year-btn')?.addEventListener('click', () => triggerPicker($('#stat-select-year')));
+
+  $('#stat-input-day')?.addEventListener('change', (e) => {
+    if (e.target.value) {
+      statDay = e.target.value;
+      updateStatPeriodUI();
+      renderStats();
+    }
+  });
+
+  $('#stat-input-week')?.addEventListener('change', (e) => {
+    if (e.target.value) {
+      const parts = e.target.value.split('-').map(Number);
+      statWeekRefDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      updateStatPeriodUI();
+      renderStats();
+    }
+  });
+
+  $('#stat-input-month')?.addEventListener('change', (e) => {
+    if (e.target.value) {
+      statMonth = e.target.value;
+      updateStatPeriodUI();
+      renderStats();
+    }
+  });
+
+  $('#stat-select-year')?.addEventListener('change', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (val > 0) {
+      statYear = val;
+      updateStatPeriodUI();
+      renderStats();
+    }
+  });
+
+  $('#btn-stat-prev')?.addEventListener('click', () => {
+    if (period === 'day') {
+      const parts = statDay.split('-').map(Number);
+      const d = new Date(parts[0], parts[1] - 1, parts[2] - 1);
+      statDay = formatLocalDateISO(d);
+    } else if (period === 'week') {
+      statWeekRefDate.setDate(statWeekRefDate.getDate() - 7);
+    } else if (period === 'month') {
+      const parts = statMonth.split('-').map(Number);
+      const d = new Date(parts[0], parts[1] - 2, 1);
+      statMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    } else if (period === 'year') {
+      statYear -= 1;
+    }
+    updateStatPeriodUI();
+    renderStats();
+  });
+
+  $('#btn-stat-next')?.addEventListener('click', () => {
+    if (period === 'day') {
+      const parts = statDay.split('-').map(Number);
+      const d = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+      statDay = formatLocalDateISO(d);
+    } else if (period === 'week') {
+      statWeekRefDate.setDate(statWeekRefDate.getDate() + 7);
+    } else if (period === 'month') {
+      const parts = statMonth.split('-').map(Number);
+      const d = new Date(parts[0], parts[1], 1);
+      statMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    } else if (period === 'year') {
+      statYear += 1;
+    }
+    updateStatPeriodUI();
+    renderStats();
   });
 
   function inPeriod(dateStr) {
     if (!dateStr) return false;
     if (period === 'all') return true;
 
-    const parts = dateStr.split('-').map(Number);
-    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
-      return true;
-    }
-    const [year, month, day] = parts;
-    const txDate = new Date(year, month - 1, day);
-    const now = new Date();
-    // Normalize time to end of today for upper bound
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-    if (period === 'month') {
-      const isCurrentCalendarMonth = (year === now.getFullYear() && (month - 1) === now.getMonth());
-      const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-      return isCurrentCalendarMonth || (txDate >= thirtyDaysAgo && txDate <= todayEnd);
+    if (period === 'day') {
+      return dateStr === statDay;
     }
 
     if (period === 'week') {
-      const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-      return txDate >= sevenDaysAgo && txDate <= todayEnd;
+      const range = getStatWeekRange();
+      return dateStr >= range.startIso && dateStr <= range.endIso;
+    }
+
+    if (period === 'month') {
+      return dateStr.startsWith(statMonth);
+    }
+
+    if (period === 'year') {
+      return dateStr.startsWith(String(statYear));
     }
 
     return true;
@@ -1398,6 +1605,7 @@ const isFirebaseConfigured = () => {
   }
 
   function renderStats() {
+    updateStatPeriodUI();
     const txs = state.transactions.filter(t => inPeriod(t.date));
     const inc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const exp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);

@@ -263,14 +263,52 @@ h3 { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: upp
 /* Period Bar & Stats */
 .period-bar {
   display: flex; gap: 4px; background: var(--card); border-radius: var(--r-full);
-  padding: 4px; margin-bottom: 18px; border: 1px solid var(--border);
+  padding: 4px; margin-bottom: 10px; border: 1px solid var(--border);
 }
 .period {
   flex: 1; background: transparent; color: var(--muted); border: none;
-  padding: 8px 12px; border-radius: var(--r-full); cursor: pointer; font-size: 13px; font-weight: 500;
+  padding: 8px 6px; border-radius: var(--r-full); cursor: pointer; font-size: 13px; font-weight: 500;
+  text-align: center; white-space: nowrap;
   transition: all 0.2s ease;
 }
 .period.active { background: var(--accent); color: white; font-weight: 600; }
+
+.stat-period-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 6px 10px; margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.stat-nav-btn {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);
+  width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;
+}
+.stat-nav-btn:hover {
+  background: var(--accent); color: white; border-color: var(--accent);
+}
+.stat-nav-display {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  min-height: 32px; position: relative; padding: 0 8px;
+}
+.stat-nav-item {
+  display: flex; align-items: center; justify-content: center; width: 100%;
+}
+.stat-nav-label {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  color: var(--text); cursor: pointer; padding: 5px 12px; border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+.stat-nav-label:hover {
+  background: rgba(255, 255, 255, 0.08); border-color: var(--accent); color: var(--accent-2);
+}
+.stat-nav-hidden-input {
+  position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; border: none; padding: 0; margin: 0;
+}
+.stat-nav-text {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+}
 
 .stat-summary {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
