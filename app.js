@@ -59,6 +59,7 @@ const isFirebaseConfigured = () => {
     categories: [
       { id: uid(), name: 'Продукты', type: 'expense', budget: 0 },
       { id: uid(), name: 'Транспорт', type: 'expense', budget: 0 },
+      { id: uid(), name: 'Автомобиль', type: 'expense', budget: 0 },
       { id: uid(), name: 'Кафе', type: 'expense', budget: 0 },
       { id: uid(), name: 'Жильё', type: 'expense', budget: 0 },
       { id: uid(), name: 'Развлечения', type: 'expense', budget: 0 },
@@ -71,6 +72,7 @@ const isFirebaseConfigured = () => {
     transactions: [],
     goals: [],
     recurring: [],
+    autoLogs: [],
     settings: {
       reportTime: '23:00',
       reminders: ['14:00', '21:00'],
@@ -100,6 +102,7 @@ const isFirebaseConfigured = () => {
       data.categories = [
         { id: uid(), name: 'Продукты', type: 'expense', budget: 0 },
         { id: uid(), name: 'Транспорт', type: 'expense', budget: 0 },
+        { id: uid(), name: 'Автомобиль', type: 'expense', budget: 0 },
         { id: uid(), name: 'Кафе', type: 'expense', budget: 0 },
         { id: uid(), name: 'Жильё', type: 'expense', budget: 0 },
         { id: uid(), name: 'Развлечения', type: 'expense', budget: 0 },
@@ -113,6 +116,7 @@ const isFirebaseConfigured = () => {
     if (!Array.isArray(data.transactions)) data.transactions = [];
     if (!Array.isArray(data.goals)) data.goals = [];
     if (!Array.isArray(data.recurring)) data.recurring = [];
+    if (!Array.isArray(data.autoLogs)) data.autoLogs = [];
     if (!data.settings) data.settings = { reportTime: '23:00', reminders: ['14:00', '21:00'], pushEnabled: false, smartReminder: true, inAppReminder: true };
     if (!Array.isArray(data.settings.reminders)) data.settings.reminders = ['14:00', '21:00'];
     if (data.settings.smartReminder === undefined) data.settings.smartReminder = true;
@@ -617,20 +621,28 @@ const isFirebaseConfigured = () => {
       return;
     }
 
+    let createdAutoDraft = false;
     if (editingTxId) {
       const tx = state.transactions.find(t => t.id === editingTxId);
       Object.assign(tx, { amount, type: txType, accountId, toAccountId, categoryId, date, note, forgivenDebt });
     } else {
-      state.transactions.push({
+      const newTx = {
         id: uid(), amount, type: txType, accountId, toAccountId, categoryId, date, note, forgivenDebt
-      });
+      };
+      state.transactions.push(newTx);
+      const draft = maybeCreateAutoLogFromTx(newTx);
+      if (draft) createdAutoDraft = true;
     }
 
     closeModal('#modal-tx');
     recalculateAllGoals();
     save();
     render();
-    showToast('Операция сохранена', 'success', 2000);
+    if (createdAutoDraft) {
+      showToast('Операция сохранена (добавлен черновик в Авто 🚗)', 'success', 3500);
+    } else {
+      showToast('Операция сохранена', 'success', 2000);
+    }
   });
 
   $('#tx-save-next')?.addEventListener('click', () => {
@@ -649,14 +661,20 @@ const isFirebaseConfigured = () => {
       return;
     }
 
-    state.transactions.push({
+    const newTx = {
       id: uid(), amount, type: txType, accountId, toAccountId, categoryId, date, note, forgivenDebt
-    });
+    };
+    state.transactions.push(newTx);
+    const draft = maybeCreateAutoLogFromTx(newTx);
 
     recalculateAllGoals();
     save();
     render();
-    showToast('Операция добавлена', 'success', 2000);
+    if (draft) {
+      showToast('Операция добавлена (черновик в Авто 🚗)', 'success', 3000);
+    } else {
+      showToast('Операция добавлена', 'success', 2000);
+    }
 
     // Reset amount and note, keep date, account, category for next entry
     $('#tx-amount').value = '';
@@ -1240,7 +1258,7 @@ const isFirebaseConfigured = () => {
 
   // ---------- Reset / Clear Transactions & Balances ----------
   $('#btn-clear-data')?.addEventListener('click', () => {
-    const ok = confirm('Очистить историю операций и обнулить балансы?\n\n• Все операции (транзакции) будут удалены.\n• Балансы счетов станут 0 ₽.\n• Все ваши настроенные категории и счета останутся без изменений.');
+    const ok = confirm('Очистить историю операций и обнулить балансы?\n\n• Все операции (транзакции) будут удалены.\n• Балансы счетов станут 0 ₽.\n• Все ваши категории, счета и записи в бортжурнале авто сохраняются без изменений.');
     if (!ok) return;
 
     // Reset transactions only
@@ -1540,6 +1558,7 @@ const isFirebaseConfigured = () => {
       renderGoals();
       renderRecurring();
       renderStats();
+      renderAuto();
     } catch (err) {
       console.error('Render error:', err);
     }
@@ -2269,6 +2288,447 @@ const isFirebaseConfigured = () => {
       list.appendChild(li);
     });
   }
+
+  // ---------- Car Log (Бортжурнал Авто) ----------
+  let autoFilter = { type: 'all', search: '' };
+  let editingAutoLogId = null;
+  let currentAutoType = 'fuel';
+
+  const AUTO_TYPE_NAMES = {
+    fuel: 'Бензин',
+    repair: 'Ремонт/ТО',
+    parts: 'Запчасти',
+    wash: 'Мойка',
+    other: 'Прочее'
+  };
+
+  const AUTO_TYPE_ICONS = {
+    fuel: '⛽',
+    repair: '🔧',
+    parts: '⚙️',
+    wash: '🧼',
+    other: '📄'
+  };
+
+  function isAutoCategory(name) {
+    if (!name) return false;
+    return /авто|машин|бензин|топлив|сервис|сто\b|гараж|шиномонтаж|мойк/i.test(name);
+  }
+
+  function detectAutoType(text) {
+    if (!text) return 'other';
+    const s = text.toLowerCase();
+    if (/бензин|топлив|заправ|азс|дизел|газ\b/i.test(s)) return 'fuel';
+    if (/мойк|химчистк|детейлинг/i.test(s)) return 'wash';
+    if (/запчаст|детал|фильтр|колодк|свеч|резин|аккумулятор|ламп/i.test(s)) return 'parts';
+    if (/ремонт|замен|сто\b|сервис|шиномонтаж|то\b|диагностик|масл/i.test(s)) return 'repair';
+    return 'other';
+  }
+
+  function maybeCreateAutoLogFromTx(tx) {
+    if (!tx || tx.type !== 'expense') return null;
+    const cat = state.categories.find(c => c.id === tx.categoryId);
+    const catName = cat ? cat.name : '';
+    const note = tx.note || '';
+
+    // Check if category or note matches auto keywords
+    if (!isAutoCategory(catName) && !isAutoCategory(note)) return null;
+
+    if (!Array.isArray(state.autoLogs)) state.autoLogs = [];
+
+    const autoType = detectAutoType(note) !== 'other' 
+      ? detectAutoType(note) 
+      : (detectAutoType(catName) !== 'other' ? detectAutoType(catName) : 'repair');
+
+    const logEntry = {
+      id: uid(),
+      cost: Number(tx.amount) || 0,
+      date: tx.date || todayISO(),
+      type: autoType,
+      title: note || catName || 'Расход на авто',
+      details: '',
+      note: '',
+      mileage: null,
+      litres: null,
+      status: 'draft',
+      createdAt: Date.now()
+    };
+
+    state.autoLogs.push(logEntry);
+    return logEntry;
+  }
+
+  function renderAuto() {
+    if (!Array.isArray(state.autoLogs)) state.autoLogs = [];
+
+    // Calculate summary statistics
+    let totalCost = 0;
+    let costFuel = 0;
+    let costRepair = 0;
+    let costParts = 0;
+    let costOther = 0;
+    let maxMileage = 0;
+    let draftCount = 0;
+
+    state.autoLogs.forEach(log => {
+      const c = Number(log.cost) || 0;
+      totalCost += c;
+      if (log.type === 'fuel') costFuel += c;
+      else if (log.type === 'repair') costRepair += c;
+      else if (log.type === 'parts') costParts += c;
+      else costOther += c;
+
+      if (log.mileage && Number(log.mileage) > maxMileage) {
+        maxMileage = Number(log.mileage);
+      }
+      if (log.status === 'draft') {
+        draftCount++;
+      }
+    });
+
+    const totalEl = $('#auto-total-cost');
+    if (totalEl) totalEl.textContent = fmt(totalCost);
+
+    const fuelEl = $('#auto-cost-fuel');
+    if (fuelEl) fuelEl.textContent = fmt(costFuel);
+
+    const repairEl = $('#auto-cost-repair');
+    if (repairEl) repairEl.textContent = fmt(costRepair);
+
+    const partsEl = $('#auto-cost-parts');
+    if (partsEl) partsEl.textContent = fmt(costParts);
+
+    const otherEl = $('#auto-cost-other');
+    if (otherEl) otherEl.textContent = fmt(costOther);
+
+    const mileageEl = $('#auto-current-mileage');
+    if (mileageEl) {
+      mileageEl.textContent = maxMileage > 0 ? `${maxMileage.toLocaleString('ru-RU')} км` : '— км';
+    }
+
+    // Draft banner
+    const draftBanner = $('#auto-draft-banner');
+    const draftText = $('#auto-draft-text');
+    if (draftBanner && draftText) {
+      if (draftCount > 0) {
+        draftBanner.style.display = 'flex';
+        draftText.textContent = `Есть ${draftCount} ${pluralizeAutoDrafts(draftCount)}: уточните детали, пробег или литры`;
+      } else {
+        draftBanner.style.display = 'none';
+      }
+    }
+
+    renderAutoLogsList();
+  }
+
+  function pluralizeAutoDrafts(n) {
+    const abs = Math.abs(n) % 100;
+    const n1 = abs % 10;
+    if (abs > 10 && abs < 20) return 'записей, требующих уточнения';
+    if (n1 > 1 && n1 < 5) return 'записи, требующие уточнения';
+    if (n1 === 1) return 'запись, требующая уточнения';
+    return 'записей, требующих уточнения';
+  }
+
+  function renderAutoLogsList() {
+    const list = $('#auto-logs-list');
+    const empty = $('#auto-empty');
+    if (!list) return;
+    list.innerHTML = '';
+
+    let filtered = [...state.autoLogs];
+
+    // Filter by type
+    if (autoFilter.type === 'draft') {
+      filtered = filtered.filter(l => l.status === 'draft');
+    } else if (autoFilter.type && autoFilter.type !== 'all') {
+      filtered = filtered.filter(l => l.type === autoFilter.type);
+    }
+
+    // Filter by search query
+    if (autoFilter.search) {
+      const q = autoFilter.search.toLowerCase();
+      filtered = filtered.filter(l => {
+        const title = (l.title || '').toLowerCase();
+        const details = (l.details || '').toLowerCase();
+        const note = (l.note || '').toLowerCase();
+        const typeName = (AUTO_TYPE_NAMES[l.type] || '').toLowerCase();
+        return title.includes(q) || details.includes(q) || note.includes(q) || typeName.includes(q);
+      });
+    }
+
+    if (filtered.length === 0) {
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = state.autoLogs.length === 0 
+          ? 'Записей в бортжурнале пока нет. Добавьте первую операцию!' 
+          : 'По выбранным фильтрам записей не найдено.';
+      }
+      return;
+    }
+
+    if (empty) empty.hidden = true;
+
+    // Sort: newest first
+    filtered.sort((a, b) => {
+      const dDiff = (b.date || '').localeCompare(a.date || '');
+      if (dDiff !== 0) return dDiff;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    filtered.forEach(log => {
+      const li = document.createElement('li');
+      li.className = 'auto-card';
+      li.dataset.id = log.id;
+
+      const typeBadgeClass = `type-${log.type || 'other'}`;
+      const typeIcon = AUTO_TYPE_ICONS[log.type] || '📄';
+      const typeName = AUTO_TYPE_NAMES[log.type] || 'Прочее';
+
+      let fuelPriceStr = '';
+      if (log.type === 'fuel' && log.litres && log.cost) {
+        const p = (Number(log.cost) / Number(log.litres)).toFixed(2);
+        fuelPriceStr = ` (${p} ₽/л)`;
+      }
+
+      li.innerHTML = `
+        <div class="auto-card-top">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="auto-type-badge ${typeBadgeClass}">
+              ${typeIcon} ${typeName}
+            </span>
+            ${log.status === 'draft' ? `<span class="auto-draft-tag">⚠️ Требует уточнения</span>` : ''}
+          </div>
+          <div class="auto-card-cost">${fmt(log.cost)}</div>
+        </div>
+        
+        <div class="auto-card-title">${escapeHtml(log.title || 'Без названия')}</div>
+
+        <div class="auto-card-meta">
+          <span>📅 ${formatDate(log.date)}</span>
+          ${log.mileage ? `<span>🛣️ ${Number(log.mileage).toLocaleString('ru-RU')} км</span>` : ''}
+          ${log.type === 'fuel' && log.litres ? `<span>⛽ ${log.litres} л${fuelPriceStr}</span>` : ''}
+          ${log.note ? `<span>💬 ${escapeHtml(log.note)}</span>` : ''}
+        </div>
+
+        ${log.details ? `
+          <div class="auto-parts-preview">
+            <strong>Детали / запчасти:</strong> ${escapeHtml(log.details)}
+          </div>
+        ` : ''}
+      `;
+
+      li.addEventListener('click', () => {
+        openAutoModal(log.id);
+      });
+
+      list.appendChild(li);
+    });
+  }
+
+  function updateAutoFuelPriceCalc() {
+    const amt = parseFloat($('#auto-amount')?.value?.replace(',', '.') || 0);
+    const litres = parseFloat($('#auto-fuel-litres')?.value?.replace(',', '.') || 0);
+    const label = $('#auto-fuel-price-per-l');
+    if (!label) return;
+    if (amt > 0 && litres > 0) {
+      const p = (amt / litres).toFixed(2);
+      label.textContent = `${p} ₽/л`;
+      label.style.color = 'var(--accent-2)';
+    } else {
+      label.textContent = '— ₽/л';
+      label.style.color = 'var(--text)';
+    }
+  }
+
+  function updateAutoModalTypeUI() {
+    $$('#auto-type-seg .auto-seg-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.type === currentAutoType);
+    });
+
+    const fuelBox = $('#auto-fuel-details-box');
+    const partsBox = $('#auto-parts-details-box');
+
+    if (fuelBox) {
+      fuelBox.style.display = (currentAutoType === 'fuel') ? 'flex' : 'none';
+    }
+    if (partsBox) {
+      partsBox.style.display = (currentAutoType === 'parts' || currentAutoType === 'repair') ? 'block' : 'none';
+    }
+    updateAutoFuelPriceCalc();
+  }
+
+  function openAutoModal(id = null) {
+    editingAutoLogId = id;
+    const deleteBtn = $('#auto-delete');
+    const titleEl = $('#modal-auto-title');
+
+    // Calculate max mileage so far for handy default
+    let maxMil = 0;
+    if (Array.isArray(state.autoLogs)) {
+      state.autoLogs.forEach(l => {
+        if (l.mileage && Number(l.mileage) > maxMil) maxMil = Number(l.mileage);
+      });
+    }
+
+    if (id) {
+      const log = state.autoLogs.find(l => l.id === id);
+      if (!log) return;
+      if (titleEl) titleEl.textContent = log.status === 'draft' ? 'Уточнение записи об авто' : 'Редактировать запись';
+      if (deleteBtn) deleteBtn.hidden = false;
+
+      currentAutoType = log.type || 'fuel';
+      $('#auto-amount').value = log.cost || '';
+      $('#auto-mileage').value = log.mileage || '';
+      $('#auto-date').value = log.date || todayISO();
+      $('#auto-title').value = log.title || '';
+      $('#auto-fuel-litres').value = log.litres || '';
+      $('#auto-parts-details').value = log.details || '';
+      $('#auto-note').value = log.note || '';
+    } else {
+      if (titleEl) titleEl.textContent = 'Новая запись об авто';
+      if (deleteBtn) deleteBtn.hidden = true;
+
+      currentAutoType = 'fuel';
+      $('#auto-amount').value = '';
+      $('#auto-mileage').value = maxMil > 0 ? maxMil : '';
+      $('#auto-date').value = todayISO();
+      $('#auto-title').value = '';
+      $('#auto-fuel-litres').value = '';
+      $('#auto-parts-details').value = '';
+      $('#auto-note').value = '';
+    }
+
+    updateAutoModalTypeUI();
+    openModal('#modal-auto-log');
+    setTimeout(() => {
+      const focusTarget = id ? $('#auto-title') : $('#auto-amount');
+      if (focusTarget) focusTarget.focus();
+    }, 100);
+  }
+
+  // Segment buttons in auto modal
+  $$('#auto-type-seg .auto-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentAutoType = btn.dataset.type;
+      updateAutoModalTypeUI();
+      // Auto-suggest title if empty
+      const titleInput = $('#auto-title');
+      if (titleInput && !titleInput.value.trim()) {
+        if (currentAutoType === 'fuel') titleInput.placeholder = 'Заправка АИ-95, 92...';
+        else if (currentAutoType === 'repair') titleInput.placeholder = 'Замена масла, диагностика ходовой...';
+        else if (currentAutoType === 'parts') titleInput.placeholder = 'Масляный фильтр, тормозные колодки...';
+        else if (currentAutoType === 'wash') titleInput.placeholder = 'Комплексная мойка кузова...';
+      }
+    });
+  });
+
+  // Calculation on input
+  $('#auto-amount')?.addEventListener('input', updateAutoFuelPriceCalc);
+  $('#auto-fuel-litres')?.addEventListener('input', updateAutoFuelPriceCalc);
+
+  // Save auto log
+  $('#auto-save')?.addEventListener('click', () => {
+    const rawAmt = $('#auto-amount').value.replace(',', '.');
+    const amount = parseFloat(rawAmt);
+    if (!amount || amount <= 0) {
+      showToast('Введите корректную сумму расхода', 'warning');
+      return;
+    }
+
+    const rawMileage = $('#auto-mileage').value.trim();
+    const mileage = rawMileage ? parseInt(rawMileage, 10) : null;
+    const date = $('#auto-date').value || todayISO();
+    let title = $('#auto-title').value.trim();
+    if (!title) {
+      title = AUTO_TYPE_NAMES[currentAutoType] || 'Расход на авто';
+    }
+
+    const rawLitres = $('#auto-fuel-litres')?.value?.replace(',', '.');
+    const litres = (currentAutoType === 'fuel' && rawLitres) ? parseFloat(rawLitres) : null;
+    const details = $('#auto-parts-details')?.value?.trim() || '';
+    const note = $('#auto-note')?.value?.trim() || '';
+
+    if (!Array.isArray(state.autoLogs)) state.autoLogs = [];
+
+    if (editingAutoLogId) {
+      const log = state.autoLogs.find(l => l.id === editingAutoLogId);
+      if (log) {
+        Object.assign(log, {
+          cost: amount,
+          type: currentAutoType,
+          mileage,
+          date,
+          title,
+          litres,
+          details,
+          note,
+          status: 'done' // clarified / finalized
+        });
+      }
+    } else {
+      state.autoLogs.push({
+        id: uid(),
+        cost: amount,
+        type: currentAutoType,
+        mileage,
+        date,
+        title,
+        litres,
+        details,
+        note,
+        status: 'done',
+        createdAt: Date.now()
+      });
+    }
+
+    save();
+    renderAuto();
+    closeModal('#modal-auto-log');
+    showToast('Запись в бортжурнал сохранена!', 'success', 2500);
+  });
+
+  // Delete auto log
+  $('#auto-delete')?.addEventListener('click', () => {
+    if (!editingAutoLogId) return;
+    if (!confirm('Удалить эту запись из бортжурнала?')) return;
+
+    state.autoLogs = state.autoLogs.filter(l => l.id !== editingAutoLogId);
+    save();
+    renderAuto();
+    closeModal('#modal-auto-log');
+    showToast('Запись удалена из бортжурнала', 'info', 2500);
+  });
+
+  // Open modal button
+  $('#btn-add-auto-log')?.addEventListener('click', () => {
+    openAutoModal(null);
+  });
+
+  // Draft filter banner click
+  $('#btn-auto-filter-drafts')?.addEventListener('click', () => {
+    autoFilter.type = 'draft';
+    $$('.auto-chip-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.autoType === 'draft');
+    });
+    renderAutoLogsList();
+  });
+
+  // Chip filter buttons
+  $$('.auto-chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.auto-chip-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      autoFilter.type = btn.dataset.autoType;
+      renderAutoLogsList();
+    });
+  });
+
+  // Auto search filter
+  $('#auto-filter-search')?.addEventListener('input', (e) => {
+    autoFilter.search = e.target.value.toLowerCase().trim();
+    renderAutoLogsList();
+  });
 
   function formatDate(iso) {
     const d = new Date(iso);

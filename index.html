@@ -71,6 +71,7 @@
     <button class="tab" data-tab="cats">Категории</button>
     <button class="tab" data-tab="goals">Цели</button>
     <button class="tab" data-tab="recurring">Регулярный платёж</button>
+    <button class="tab" data-tab="auto">🚗 Авто</button>
     <button class="tab" data-tab="stats">Отчёт</button>
   </nav>
 
@@ -251,6 +252,84 @@
 
       <h3>По категориям (расходы)</h3>
       <ul id="stat-cats" class="list bars"></ul>
+    </section>
+
+    <!-- Бортжурнал Автомобиль -->
+    <section id="tab-auto" class="tab-panel">
+      <!-- Сводная карточка авто -->
+      <div class="auto-summary-card">
+        <div class="auto-summary-header">
+          <div class="auto-summary-title">
+            <span style="font-size: 22px;">🚗</span>
+            <div>
+              <div style="font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Бортжурнал авто</div>
+              <div style="font-size: 20px; font-weight: 700; color: var(--text); margin-top: 2px;" id="auto-total-cost">0 ₽</div>
+            </div>
+          </div>
+          <div class="auto-mileage-badge">
+            <span style="color: var(--muted); font-size: 11px;">Пробег:</span>
+            <strong id="auto-current-mileage" style="color: var(--accent-2); font-size: 13px;">— км</strong>
+          </div>
+        </div>
+
+        <div class="auto-category-stats">
+          <div class="auto-cat-item">
+            <span class="auto-cat-icon">⛽</span>
+            <span class="auto-cat-label">Бензин</span>
+            <strong class="auto-cat-val" id="auto-cost-fuel">0 ₽</strong>
+          </div>
+          <div class="auto-cat-item">
+            <span class="auto-cat-icon">🔧</span>
+            <span class="auto-cat-label">Ремонт/ТО</span>
+            <strong class="auto-cat-val" id="auto-cost-repair">0 ₽</strong>
+          </div>
+          <div class="auto-cat-item">
+            <span class="auto-cat-icon">⚙️</span>
+            <span class="auto-cat-label">Запчасти</span>
+            <strong class="auto-cat-val" id="auto-cost-parts">0 ₽</strong>
+          </div>
+          <div class="auto-cat-item">
+            <span class="auto-cat-icon">📄</span>
+            <span class="auto-cat-label">Прочее</span>
+            <strong class="auto-cat-val" id="auto-cost-other">0 ₽</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Баннер черновиков (неуточнённых записей) -->
+      <div id="auto-draft-banner" class="auto-draft-banner" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">⚠️</span>
+          <span style="font-size: 13px; font-weight: 600;" id="auto-draft-text">Есть записи, требующие уточнения</span>
+        </div>
+        <button id="btn-auto-filter-drafts" class="secondary-sm" type="button" style="padding: 4px 10px; font-size: 12px;">Показать</button>
+      </div>
+
+      <!-- Панель поиска и фильтров -->
+      <div class="search-bar" style="margin-top: 14px;">
+        <div style="position: relative; flex: 1;">
+          <svg class="icon-svg search-icon-inside" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="auto-filter-search" type="search" placeholder="Поиск по деталям, названию, сервису..." style="width: 100%;" />
+        </div>
+      </div>
+
+      <div class="auto-filter-chips">
+        <button type="button" class="auto-chip-btn active" data-auto-type="all">Все</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="fuel">⛽ Бензин</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="repair">🔧 Ремонт/ТО</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="parts">⚙️ Запчасти</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="wash">🧼 Мойка</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="other">📄 Прочее</button>
+        <button type="button" class="auto-chip-btn" data-auto-type="draft">⚠️ Черновики</button>
+      </div>
+
+      <!-- Список записей бортжурнала -->
+      <ul id="auto-logs-list" class="list" style="margin-top: 14px;"></ul>
+      <p id="auto-empty" class="empty" hidden>Записей в бортжурнале пока нет.</p>
+
+      <button id="btn-add-auto-log" class="secondary" type="button" style="width: 100%; margin-top: 14px; padding: 12px; font-weight: 600;">
+        + Запись в бортжурнал
+      </button>
     </section>
   </main>
 
@@ -675,6 +754,65 @@ service cloud.firestore {
           <button data-close class="ghost">Закрыть</button>
           <button id="btn-save-settings" class="primary">Сохранить</button>
         </div>
+      </div>
+    </div>
+  <!-- Модалка бортжурнала автомобиля -->
+  <div id="modal-auto-log" class="modal" hidden>
+    <div class="modal-content" style="max-width: 480px;">
+      <h2 id="modal-auto-title">Запись об автомобиле</h2>
+
+      <label>Тип записи
+        <div class="seg" id="auto-type-seg" style="margin-top: 6px; margin-bottom: 12px; display: flex; flex-wrap: wrap;">
+          <button type="button" data-type="fuel" class="seg-btn auto-seg-btn active">⛽ Бензин</button>
+          <button type="button" data-type="repair" class="seg-btn auto-seg-btn">🔧 Ремонт</button>
+          <button type="button" data-type="parts" class="seg-btn auto-seg-btn">⚙️ Запчасти</button>
+          <button type="button" data-type="wash" class="seg-btn auto-seg-btn">🧼 Мойка</button>
+          <button type="button" data-type="other" class="seg-btn auto-seg-btn">📄 Прочее</button>
+        </div>
+      </label>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <label>Сумма (₽)
+          <input id="auto-amount" type="number" step="0.01" inputmode="decimal" placeholder="0" required />
+        </label>
+        <label>Пробег (км)
+          <input id="auto-mileage" type="number" step="1" inputmode="numeric" placeholder="например, 145000" />
+        </label>
+      </div>
+
+      <label>Дата
+        <input id="auto-date" type="date" />
+      </label>
+
+      <label>Название / Описание
+        <input id="auto-title" type="text" placeholder="Замена масла, Заправка АИ-95…" />
+      </label>
+
+      <!-- Блок подробностей по заправке -->
+      <div id="auto-fuel-details-box" style="display: flex; gap: 10px; margin-bottom: 12px; background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+        <label style="flex: 1; margin: 0; font-size: 12px;">Объём (литры)
+          <input id="auto-fuel-litres" type="number" step="0.01" placeholder="45.5" style="margin-top: 4px; padding: 6px;" />
+        </label>
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+          <span style="font-size: 11px; color: var(--muted);">Цена за литр:</span>
+          <span id="auto-fuel-price-per-l" style="font-size: 13px; font-weight: 600; color: var(--text); margin-top: 4px;">— ₽/л</span>
+        </div>
+      </div>
+
+      <!-- Блок конкретных деталей / запчастей -->
+      <label id="auto-parts-details-box">Запчасти и детали (артикулы, бренды)
+        <textarea id="auto-parts-details" rows="2" placeholder="Масло Mobil 5W-40 (4л), фильтр масляный Mann…" style="resize: vertical; font-size: 13px;"></textarea>
+      </label>
+
+      <label>Автосервис / Заметки
+        <input id="auto-note" type="text" placeholder="Где делалось, гарантия, рекомендации мастера…" />
+      </label>
+
+      <div class="modal-actions">
+        <button id="auto-delete" class="danger" hidden type="button">Удалить</button>
+        <span class="spacer"></span>
+        <button data-close class="ghost" type="button">Отмена</button>
+        <button id="auto-save" class="primary" type="button">Сохранить</button>
       </div>
     </div>
   </div>
