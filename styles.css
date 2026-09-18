@@ -1112,3 +1112,210 @@ input[type=number] {
   font-size: 11px;
 }
 
+/* App Mode Dropdown (Финансы / Бортжурнал) */
+.app-mode-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-mode-dropdown {
+  position: relative;
+}
+
+.app-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  padding: 6px 12px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.app-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.mode-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.mode-chevron {
+  stroke: var(--muted);
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.app-mode-btn[aria-expanded="true"] .mode-chevron {
+  transform: rotate(180deg);
+}
+
+.mode-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  min-width: 260px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: fadeInDown 0.15s ease-out;
+}
+
+.mode-dropdown-menu[hidden] {
+  display: none !important;
+}
+
+.mode-opt-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.mode-opt-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mode-opt-item.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.mode-opt-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.mode-opt-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-opt-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.mode-opt-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  line-height: 1.3;
+}
+
+/* Interactive Mileage Badge */
+.auto-mileage-badge-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.auto-mileage-badge-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-2);
+  transform: translateY(-1px);
+}
+
+/* Export Modal Styles */
+.export-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.export-opt-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.export-opt-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.export-opt-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.export-opt-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-opt-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.export-opt-text span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.export-opt-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-2);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+

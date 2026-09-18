@@ -73,6 +73,7 @@ const isFirebaseConfigured = () => {
     goals: [],
     recurring: [],
     autoLogs: [],
+    carMileage: null,
     settings: {
       reportTime: '23:00',
       reminders: ['14:00', '21:00'],
@@ -117,6 +118,7 @@ const isFirebaseConfigured = () => {
     if (!Array.isArray(data.goals)) data.goals = [];
     if (!Array.isArray(data.recurring)) data.recurring = [];
     if (!Array.isArray(data.autoLogs)) data.autoLogs = [];
+    if (data.carMileage === undefined) data.carMileage = null;
     if (!data.settings) data.settings = { reportTime: '23:00', reminders: ['14:00', '21:00'], pushEnabled: false, smartReminder: true, inAppReminder: true };
     if (!Array.isArray(data.settings.reminders)) data.settings.reminders = ['14:00', '21:00'];
     if (data.settings.smartReminder === undefined) data.settings.smartReminder = true;
@@ -483,6 +485,91 @@ const isFirebaseConfigured = () => {
     }
   });
 
+  // ---------- App Mode (Финансы / Бортжурнал) ----------
+  let currentAppMode = 'finance';
+  try {
+    const savedMode = localStorage.getItem('finance-app-mode');
+    if (savedMode === 'auto' || savedMode === 'finance') currentAppMode = savedMode;
+  } catch (e) {}
+
+  function setAppMode(mode) {
+    currentAppMode = mode;
+    try { localStorage.setItem('finance-app-mode', mode); } catch (e) {}
+
+    const iconEl = $('#current-mode-icon');
+    const titleEl = $('#current-mode-title');
+    const toggleBtn = $('#btn-mode-toggle');
+    const menu = $('#mode-dropdown-menu');
+
+    if (menu) menu.hidden = true;
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+
+    $$('.mode-opt-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.mode === mode);
+    });
+
+    const tabsNav = $('#finance-tabs-nav');
+    const balanceCard = document.querySelector('.balance-card');
+    const btnClearData = $('#btn-clear-data');
+    const btnClearAutoData = $('#btn-clear-auto-data');
+
+    if (mode === 'auto') {
+      if (iconEl) iconEl.textContent = '🚗';
+      if (titleEl) titleEl.textContent = 'Бортжурнал';
+      if (tabsNav) tabsNav.style.display = 'none';
+      if (balanceCard) balanceCard.style.display = 'none';
+      if (btnClearData) btnClearData.style.display = 'none';
+      if (btnClearAutoData) btnClearAutoData.style.display = 'inline-flex';
+
+      // Activate auto panel
+      $$('.tab-panel').forEach(p => p.classList.remove('active'));
+      const autoPanel = $('#tab-auto');
+      if (autoPanel) autoPanel.classList.add('active');
+
+      renderAuto();
+    } else {
+      if (iconEl) iconEl.textContent = '💰';
+      if (titleEl) titleEl.textContent = 'Финансы';
+      if (tabsNav) tabsNav.style.display = 'flex';
+      if (balanceCard) balanceCard.style.display = 'flex';
+      if (btnClearData) btnClearData.style.display = 'inline-flex';
+      if (btnClearAutoData) btnClearAutoData.style.display = 'none';
+
+      // Activate the active finance tab or default to 'tx'
+      $$('.tab-panel').forEach(p => p.classList.remove('active'));
+      const activeTabBtn = document.querySelector('.tab.active');
+      const targetId = activeTabBtn ? '#tab-' + activeTabBtn.dataset.tab : '#tab-tx';
+      const panel = $(targetId) || $('#tab-tx');
+      if (panel) panel.classList.add('active');
+    }
+  }
+
+  $('#btn-mode-toggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('#mode-dropdown-menu');
+    const btn = $('#btn-mode-toggle');
+    if (!menu) return;
+    const willOpen = menu.hidden;
+    menu.hidden = !willOpen;
+    if (btn) btn.setAttribute('aria-expanded', String(willOpen));
+  });
+
+  $$('.mode-opt-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const m = item.dataset.mode;
+      if (m) setAppMode(m);
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    const menu = $('#mode-dropdown-menu');
+    const btn = $('#btn-mode-toggle');
+    if (menu && !menu.hidden && !e.target.closest('#app-mode-dropdown')) {
+      menu.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
   // ---------- Tabs ----------
   $$('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -789,7 +876,13 @@ const isFirebaseConfigured = () => {
     save(); closeModal('#modal-tx'); render();
   });
 
-  $('#btn-add-tx').addEventListener('click', () => openTxModal());
+  $('#btn-add-tx').addEventListener('click', () => {
+    if (currentAppMode === 'auto') {
+      openAutoModal(null);
+    } else {
+      openTxModal();
+    }
+  });
 
   function fillAccountSelect(sel, selected) {
     sel.innerHTML = '';
@@ -1229,19 +1322,112 @@ const isFirebaseConfigured = () => {
     showToast('Регулярный платеж удален', 'info', 2000);
   });
 
-  // ---------- Export / Import ----------
-  $('#btn-export').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  // ---------- Export & Import (Excel / CSV / JSON) ----------
+  function downloadFile(content, fileName, mimeType) {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `finance-${todayISO()}.json`;
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Файл данных экспортирован', 'success', 2000);
+  }
+
+  function csvEscape(field) {
+    if (field === null || field === undefined) return '""';
+    const s = String(field).replace(/"/g, '""');
+    return `"${s}"`;
+  }
+
+  function exportFinanceCSV() {
+    if (!state.transactions || state.transactions.length === 0) {
+      showToast('Нет операций для экспорта', 'warning');
+      return;
+    }
+    const headers = ['Дата', 'Тип', 'Категория', 'Счёт (откуда)', 'Счёт (куда)', 'Сумма (₽)', 'Комментарий', 'Списание с долга'];
+    const rows = [headers.map(csvEscape).join(';')];
+
+    const txs = [...state.transactions].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    txs.forEach(t => {
+      const typeLabel = t.type === 'income' ? 'Доход' : (t.type === 'expense' ? 'Расход' : 'Перевод');
+      const cat = state.categories.find(c => c.id === t.categoryId);
+      const catName = cat ? cat.name : (t.type === 'transfer' ? 'Перевод' : '—');
+      const acc = state.accounts.find(a => a.id === t.accountId);
+      const accName = acc ? acc.name : '—';
+      const toAcc = state.accounts.find(a => a.id === t.toAccountId);
+      const toAccName = toAcc ? toAcc.name : '—';
+      const row = [
+        t.date || '',
+        typeLabel,
+        catName,
+        accName,
+        toAccName,
+        (t.amount || 0).toFixed(2).replace('.', ','),
+        t.note || '',
+        t.forgivenDebt ? 'Да' : 'Нет'
+      ];
+      rows.push(row.map(csvEscape).join(';'));
+    });
+
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    downloadFile(csvContent, `finances-${todayISO()}.csv`, 'text/csv;charset=utf-8;');
+    closeModal('#modal-export');
+    showToast('📊 Финансы выгружены в Excel (CSV)!', 'success', 3000);
+  }
+
+  function exportAutoCSV() {
+    if (!state.autoLogs || state.autoLogs.length === 0) {
+      showToast('В бортжурнале пока нет записей для экспорта', 'warning');
+      return;
+    }
+    const headers = ['Дата', 'Тип', 'Название', 'Сумма (₽)', 'Пробег (км)', 'Литры', 'Цена за литр (₽/л)', 'Запчасти / детали', 'СТО / заметки', 'Статус'];
+    const rows = [headers.map(csvEscape).join(';')];
+
+    const logs = [...state.autoLogs].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    logs.forEach(l => {
+      const typeName = AUTO_TYPE_NAMES[l.type] || 'Прочее';
+      const pricePerL = (l.type === 'fuel' && l.litres && l.cost) ? (Number(l.cost) / Number(l.litres)).toFixed(2).replace('.', ',') : '';
+      const statusLabel = l.status === 'draft' ? 'Черновик (требует уточнения)' : 'Подтверждено';
+      const row = [
+        l.date || '',
+        typeName,
+        l.title || '',
+        (l.cost || 0).toFixed(2).replace('.', ','),
+        l.mileage || '',
+        l.litres ? String(l.litres).replace('.', ',') : '',
+        pricePerL,
+        l.details || '',
+        l.note || '',
+        statusLabel
+      ];
+      rows.push(row.map(csvEscape).join(';'));
+    });
+
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    downloadFile(csvContent, `car-logbook-${todayISO()}.csv`, 'text/csv;charset=utf-8;');
+    closeModal('#modal-export');
+    showToast('🚗 Бортжурнал выгружен в Excel (CSV)!', 'success', 3000);
+  }
+
+  function exportFullJSON() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    downloadFile(blob, `finance-backup-${todayISO()}.json`, 'application/json');
+    closeModal('#modal-export');
+    showToast('💾 Полный архив данных экспортирован (JSON)', 'success', 3000);
+  }
+
+  $('#btn-export')?.addEventListener('click', () => {
+    openModal('#modal-export');
   });
-  $('#btn-import').addEventListener('click', () => $('#file-import').click());
-  $('#file-import').addEventListener('change', async (e) => {
+
+  $('#btn-export-finance-csv')?.addEventListener('click', exportFinanceCSV);
+  $('#btn-export-auto-csv')?.addEventListener('click', exportAutoCSV);
+  $('#btn-export-json')?.addEventListener('click', exportFullJSON);
+
+  $('#btn-import')?.addEventListener('click', () => $('#file-import').click());
+  $('#file-import')?.addEventListener('change', async (e) => {
     const file = e.target.files[0]; if (!file) return;
     try {
       const text = await file.text();
@@ -1258,26 +1444,36 @@ const isFirebaseConfigured = () => {
 
   // ---------- Reset / Clear Transactions & Balances ----------
   $('#btn-clear-data')?.addEventListener('click', () => {
-    const ok = confirm('Очистить историю операций и обнулить балансы?\n\n• Все операции (транзакции) будут удалены.\n• Балансы счетов станут 0 ₽.\n• Все ваши категории, счета и записи в бортжурнале авто сохраняются без изменений.');
+    const ok = confirm('⚠️ Очистить историю финансовых операций и обнулить балансы?\n\n• Все операции кошелька (транзакции) будут удалены.\n• Балансы счетов станут 0 ₽.\n• Все ваши категории и счета сохраняются.\n• Бортжурнал автомобиля НЕ затрагивается и сохраняется без изменений.');
     if (!ok) return;
 
-    // Reset transactions only
     state.transactions = [];
-    
-    // Reset account balances to 0 while keeping account names and ids
     if (Array.isArray(state.accounts)) {
       state.accounts.forEach(a => { a.balance = 0; });
     }
-
-    // Reset goal progress if needed
     if (Array.isArray(state.goals)) {
       state.goals.forEach(g => { g.current = 0; });
     }
 
     save(true);
     render();
-    showToast('Операции очищены, балансы обнулены! Все категории сохранены.', 'success', 4000);
+    showToast('Операции кошелька очищены, балансы обнулены! Бортжурнал сохранён.', 'success', 4000);
   });
+
+  function clearAutoLogbook() {
+    const count = (state.autoLogs || []).length;
+    const ok = confirm(`⚠️ Очистить все записи бортжурнала (${count} шт.)?\n\n• Все записи о ремонтах, заправках, запчастях и пробеге будут удалены.\n• Показания текущего пробега будут сброшены.\n• Ваши финансовые операции и балансы счетов НЕ затрагиваются!`);
+    if (!ok) return;
+
+    state.autoLogs = [];
+    state.carMileage = null;
+    save(true);
+    renderAuto();
+    showToast('Все записи бортжурнала удалены. Финансы сохранены без изменений.', 'info', 3500);
+  }
+
+  $('#btn-clear-auto-data')?.addEventListener('click', clearAutoLogbook);
+  $('#btn-auto-clear-all')?.addEventListener('click', clearAutoLogbook);
 
   // ---------- Search & Filters ----------
   const filters = { accountId: '', type: '', query: '', dateFrom: '', dateTo: '' };
@@ -2367,7 +2563,7 @@ const isFirebaseConfigured = () => {
     let costRepair = 0;
     let costParts = 0;
     let costOther = 0;
-    let maxMileage = 0;
+    let maxMileage = state.carMileage ? Number(state.carMileage) : 0;
     let draftCount = 0;
 
     state.autoLogs.forEach(log => {
@@ -2385,6 +2581,10 @@ const isFirebaseConfigured = () => {
         draftCount++;
       }
     });
+
+    if (maxMileage > 0 && (!state.carMileage || maxMileage > state.carMileage)) {
+      state.carMileage = maxMileage;
+    }
 
     const totalEl = $('#auto-total-cost');
     if (totalEl) totalEl.textContent = fmt(totalCost);
@@ -2461,7 +2661,7 @@ const isFirebaseConfigured = () => {
       if (empty) {
         empty.hidden = false;
         empty.textContent = state.autoLogs.length === 0 
-          ? 'Записей в бортжурнале пока нет. Добавьте первую операцию!' 
+          ? 'Записей в бортжурнале пока нет. Нажмите «+ Запись в бортжурнал»!' 
           : 'По выбранным фильтрам записей не найдено.';
       }
       return;
@@ -2564,7 +2764,7 @@ const isFirebaseConfigured = () => {
     const titleEl = $('#modal-auto-title');
 
     // Calculate max mileage so far for handy default
-    let maxMil = 0;
+    let maxMil = state.carMileage || 0;
     if (Array.isArray(state.autoLogs)) {
       state.autoLogs.forEach(l => {
         if (l.mileage && Number(l.mileage) > maxMil) maxMil = Number(l.mileage);
@@ -2574,7 +2774,7 @@ const isFirebaseConfigured = () => {
     if (id) {
       const log = state.autoLogs.find(l => l.id === id);
       if (!log) return;
-      if (titleEl) titleEl.textContent = log.status === 'draft' ? 'Уточнение записи об авто' : 'Редактировать запись';
+      if (titleEl) titleEl.textContent = log.status === 'draft' ? 'Уточнение записи бортжурнала' : 'Редактировать запись';
       if (deleteBtn) deleteBtn.hidden = false;
 
       currentAutoType = log.type || 'fuel';
@@ -2586,7 +2786,7 @@ const isFirebaseConfigured = () => {
       $('#auto-parts-details').value = log.details || '';
       $('#auto-note').value = log.note || '';
     } else {
-      if (titleEl) titleEl.textContent = 'Новая запись об авто';
+      if (titleEl) titleEl.textContent = 'Новая запись в бортжурнал';
       if (deleteBtn) deleteBtn.hidden = true;
 
       currentAutoType = 'fuel';
@@ -2606,6 +2806,60 @@ const isFirebaseConfigured = () => {
       if (focusTarget) focusTarget.focus();
     }, 100);
   }
+
+  // Quick Mileage Modal (Ввод пробега)
+  function openQuickMileageModal() {
+    let cur = state.carMileage || 0;
+    if (Array.isArray(state.autoLogs)) {
+      state.autoLogs.forEach(l => {
+        if (l.mileage && Number(l.mileage) > cur) cur = Number(l.mileage);
+      });
+    }
+    const valInput = $('#quick-mileage-val');
+    const dateInput = $('#quick-mileage-date');
+    const noteInput = $('#quick-mileage-note');
+    if (valInput) valInput.value = cur > 0 ? cur : '';
+    if (dateInput) dateInput.value = todayISO();
+    if (noteInput) noteInput.value = '';
+    openModal('#modal-auto-mileage');
+    setTimeout(() => { if (valInput) valInput.focus(); }, 100);
+  }
+
+  $('#btn-edit-mileage')?.addEventListener('click', openQuickMileageModal);
+  $('#btn-quick-mileage')?.addEventListener('click', openQuickMileageModal);
+
+  $('#btn-save-quick-mileage')?.addEventListener('click', () => {
+    const rawVal = $('#quick-mileage-val')?.value?.trim();
+    const val = rawVal ? parseInt(rawVal, 10) : 0;
+    if (!val || val <= 0) {
+      showToast('Укажите корректный пробег спидометра (в км)', 'warning');
+      return;
+    }
+    const date = $('#quick-mileage-date')?.value || todayISO();
+    const note = $('#quick-mileage-note')?.value?.trim() || '';
+
+    state.carMileage = val;
+    if (!Array.isArray(state.autoLogs)) state.autoLogs = [];
+
+    state.autoLogs.push({
+      id: uid(),
+      cost: 0,
+      date,
+      type: 'other',
+      title: 'Фиксация пробега',
+      details: '',
+      note,
+      mileage: val,
+      litres: null,
+      status: 'done',
+      createdAt: Date.now()
+    });
+
+    save();
+    renderAuto();
+    closeModal('#modal-auto-mileage');
+    showToast(`Пробег сохранён: ${val.toLocaleString('ru-RU')} км`, 'success', 3000);
+  });
 
   // Segment buttons in auto modal
   $$('#auto-type-seg .auto-seg-btn').forEach(btn => {
@@ -2650,6 +2904,10 @@ const isFirebaseConfigured = () => {
     const note = $('#auto-note')?.value?.trim() || '';
 
     if (!Array.isArray(state.autoLogs)) state.autoLogs = [];
+
+    if (mileage && mileage > (state.carMileage || 0)) {
+      state.carMileage = mileage;
+    }
 
     if (editingAutoLogId) {
       const log = state.autoLogs.find(l => l.id === editingAutoLogId);
@@ -3332,6 +3590,7 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
 
   // ---------- Init ----------
   render();
+  setAppMode(currentAppMode);
   ensureFirebaseLoaded();
   startReminderScheduler();
 

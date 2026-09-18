@@ -16,7 +16,33 @@
 <body>
   <header class="top">
     <div class="top-row">
-      <h1>Финансы</h1>
+      <div class="app-mode-wrapper">
+        <div class="app-mode-dropdown" id="app-mode-dropdown">
+          <button id="btn-mode-toggle" class="app-mode-btn" type="button" aria-expanded="false" title="Переключить раздел">
+            <span id="current-mode-icon" class="mode-icon">💰</span>
+            <span id="current-mode-title" class="mode-title">Финансы</span>
+            <svg class="mode-chevron" viewBox="0 0 24 24" width="16" height="16">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div id="mode-dropdown-menu" class="mode-dropdown-menu" hidden>
+            <button type="button" class="mode-opt-item active" data-mode="finance">
+              <span class="mode-opt-icon">💰</span>
+              <div class="mode-opt-info">
+                <span class="mode-opt-name">Финансы</span>
+                <span class="mode-opt-sub">Кошельки, операции, бюджеты, отчёт</span>
+              </div>
+            </button>
+            <button type="button" class="mode-opt-item" data-mode="auto">
+              <span class="mode-opt-icon">🚗</span>
+              <div class="mode-opt-info">
+                <span class="mode-opt-name">Бортжурнал</span>
+                <span class="mode-opt-sub">ТО, заправки, запчасти, пробег</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="top-actions">
         <div id="auth-box">
           <button id="btn-google-login" class="google-btn" title="Войти через Google">
@@ -37,13 +63,16 @@
           <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span id="reminder-active-dot" class="reminder-active-dot" hidden></span>
         </button>
-        <button id="btn-export" class="icon-btn" title="Экспорт">
+        <button id="btn-export" class="icon-btn" title="Экспорт данных (Excel / CSV / JSON)">
           <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button id="btn-import" class="icon-btn" title="Импорт">
+        <button id="btn-import" class="icon-btn" title="Импорт резервной копии JSON">
           <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         </button>
-        <button id="btn-clear-data" class="icon-btn btn-danger-hover" title="Очистить операции и обнулить счета (категории сохраняются)">
+        <button id="btn-clear-data" class="icon-btn btn-danger-hover" title="Очистить историю операций (кошелёк)">
+          <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+        <button id="btn-clear-auto-data" class="icon-btn btn-danger-hover" title="Очистить записи бортжурнала" style="display: none;">
           <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         </button>
         <input id="file-import" type="file" accept="application/json" hidden />
@@ -65,13 +94,12 @@
     </div>
   </header>
 
-  <nav class="tabs">
+  <nav class="tabs" id="finance-tabs-nav">
     <button class="tab active" data-tab="tx">Операции</button>
     <button class="tab" data-tab="accounts">Счета</button>
     <button class="tab" data-tab="cats">Категории</button>
     <button class="tab" data-tab="goals">Цели</button>
     <button class="tab" data-tab="recurring">Регулярный платёж</button>
-    <button class="tab" data-tab="auto">🚗 Авто</button>
     <button class="tab" data-tab="stats">Отчёт</button>
   </nav>
 
@@ -260,16 +288,17 @@
       <div class="auto-summary-card">
         <div class="auto-summary-header">
           <div class="auto-summary-title">
-            <span style="font-size: 22px;">🚗</span>
+            <span style="font-size: 24px;">🚗</span>
             <div>
-              <div style="font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Бортжурнал авто</div>
+              <div style="font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Бортжурнал</div>
               <div style="font-size: 20px; font-weight: 700; color: var(--text); margin-top: 2px;" id="auto-total-cost">0 ₽</div>
             </div>
           </div>
-          <div class="auto-mileage-badge">
+          <button id="btn-edit-mileage" class="auto-mileage-badge-btn" type="button" title="Нажмите, чтобы ввести или обновить текущий пробег">
             <span style="color: var(--muted); font-size: 11px;">Пробег:</span>
             <strong id="auto-current-mileage" style="color: var(--accent-2); font-size: 13px;">— км</strong>
-          </div>
+            <span style="font-size: 12px; opacity: 0.8;">✏️</span>
+          </button>
         </div>
 
         <div class="auto-category-stats">
@@ -294,6 +323,16 @@
             <strong class="auto-cat-val" id="auto-cost-other">0 ₽</strong>
           </div>
         </div>
+      </div>
+
+      <!-- Кнопки быстрых действий -->
+      <div style="display: flex; gap: 10px; margin-top: 14px;">
+        <button id="btn-add-auto-log" class="primary" type="button" style="flex: 2; padding: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+          <span>+ Запись в бортжурнал</span>
+        </button>
+        <button id="btn-quick-mileage" class="secondary" type="button" style="flex: 1.2; padding: 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" title="Зафиксировать показания одометра">
+          <span>🛣️ Внести пробег</span>
+        </button>
       </div>
 
       <!-- Баннер черновиков (неуточнённых записей) -->
@@ -327,9 +366,12 @@
       <ul id="auto-logs-list" class="list" style="margin-top: 14px;"></ul>
       <p id="auto-empty" class="empty" hidden>Записей в бортжурнале пока нет.</p>
 
-      <button id="btn-add-auto-log" class="secondary" type="button" style="width: 100%; margin-top: 14px; padding: 12px; font-weight: 600;">
-        + Запись в бортжурнал
-      </button>
+      <div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted);">
+        <span>Управление бортжурналом:</span>
+        <button id="btn-auto-clear-all" class="ghost-sm" style="color: var(--danger); font-size: 11px;" type="button">
+          🗑️ Очистить записи бортжурнала
+        </button>
+      </div>
     </section>
   </main>
 
@@ -756,10 +798,83 @@ service cloud.firestore {
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Модалка экспорта данных (Excel / CSV / JSON) -->
+  <div id="modal-export" class="modal" hidden>
+    <div class="modal-content" style="max-width: 440px;">
+      <h2>📥 Экспорт данных</h2>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+        Выберите формат и раздел для выгрузки. Таблицы CSV открываются в Excel без проблем с кодировкой.
+      </p>
+
+      <div class="export-options-list">
+        <button id="btn-export-finance-csv" class="export-opt-btn" type="button">
+          <span class="export-opt-icon">📊</span>
+          <div class="export-opt-text">
+            <strong>Финансы (Excel / CSV)</strong>
+            <span>Операции кошелька, доходы, расходы, категории и счета</span>
+          </div>
+          <span class="export-opt-badge">CSV</span>
+        </button>
+
+        <button id="btn-export-auto-csv" class="export-opt-btn" type="button">
+          <span class="export-opt-icon">🚗</span>
+          <div class="export-opt-text">
+            <strong>Бортжурнал (Excel / CSV)</strong>
+            <span>Записи авто: ТО, ремонты, запчасти, заправки и пробег</span>
+          </div>
+          <span class="export-opt-badge">CSV</span>
+        </button>
+
+        <button id="btn-export-json" class="export-opt-btn" type="button">
+          <span class="export-opt-icon">💾</span>
+          <div class="export-opt-text">
+            <strong>Полный архив (JSON)</strong>
+            <span>Резервная копия всех данных для переноса или восстановления</span>
+          </div>
+          <span class="export-opt-badge">JSON</span>
+        </button>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 18px;">
+        <span class="spacer"></span>
+        <button data-close class="ghost" type="button">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка быстрого ввода пробега -->
+  <div id="modal-auto-mileage" class="modal" hidden>
+    <div class="modal-content" style="max-width: 400px;">
+      <h2>🛣️ Фиксация пробега</h2>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 14px;">
+        Укажите текущие показания одометра. Пробег будет зафиксирован в бортжурнале.
+      </p>
+
+      <label>Текущий пробег (км)
+        <input id="quick-mileage-val" type="number" step="1" inputmode="numeric" placeholder="например, 154200" required style="font-size: 18px; font-weight: 700; padding: 10px; color: var(--accent-2);" />
+      </label>
+
+      <label>Дата фиксации
+        <input id="quick-mileage-date" type="date" />
+      </label>
+
+      <label>Заметка / Причина (не обязательно)
+        <input id="quick-mileage-note" type="text" placeholder="например, Проверка перед поездкой..." />
+      </label>
+
+      <div class="modal-actions" style="margin-top: 18px;">
+        <button data-close class="ghost" type="button">Отмена</button>
+        <button id="btn-save-quick-mileage" class="primary" type="button">Сохранить пробег</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Модалка бортжурнала автомобиля -->
   <div id="modal-auto-log" class="modal" hidden>
     <div class="modal-content" style="max-width: 480px;">
-      <h2 id="modal-auto-title">Запись об автомобиле</h2>
+      <h2 id="modal-auto-title">Запись в бортжурнал</h2>
 
       <label>Тип записи
         <div class="seg" id="auto-type-seg" style="margin-top: 6px; margin-bottom: 12px; display: flex; flex-wrap: wrap;">
@@ -772,11 +887,11 @@ service cloud.firestore {
       </label>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <label>Сумма (₽)
+        <label>Сумма расходов (₽)
           <input id="auto-amount" type="number" step="0.01" inputmode="decimal" placeholder="0" required />
         </label>
         <label>Пробег (км)
-          <input id="auto-mileage" type="number" step="1" inputmode="numeric" placeholder="например, 145000" />
+          <input id="auto-mileage" type="number" step="1" inputmode="numeric" placeholder="например, 154200" />
         </label>
       </div>
 
