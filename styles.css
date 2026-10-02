@@ -1319,3 +1319,33 @@ input[type=number] {
 }
 
 
+
+
+/* ===== Садик ===== */
+.kg-sum-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+.kg-sum-grid > div { display: flex; flex-direction: column; gap: 4px; }
+.kg-sum-grid strong { font-size: 17px; }
+.kg-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; letter-spacing: .5px; }
+.kg-income { color: var(--income); }
+.kg-expense { color: var(--expense); }
+.kg-actions { display: flex; gap: 8px; margin-top: 4px; }
+.kg-actions button { flex: 1; padding: 12px 8px; font-weight: 600; }
+.kg-hint { font-size: 12px; color: var(--muted); margin: 6px 0 4px; min-height: 16px; }
+.kg-hint.warn { color: var(--warning); }
+.kg-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.6; }
+.kg-box strong { color: var(--text); }
+.kg-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; cursor: default; }
+.kg-name { font-weight: 600; font-size: 15px; }
+.kg-sub { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
+.kg-sum { font-weight: 700; white-space: nowrap; color: var(--income); }
+.kg-sum.zero { color: var(--muted); }
+.kg-short { font-size: 12px; color: var(--warning); margin-top: 2px; }
+.kg-pay-link { cursor: pointer; border-bottom: 1px dotted var(--muted); }
+.kg-pay-link:hover { color: var(--accent-2); }
+.kg-total { text-align: right; font-weight: 700; padding: 12px 4px; font-size: 14px; }
+.kg-danger-zone { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+.kr-opts { margin-bottom: 4px; }
+.kr-opts-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 6px; }
+#kr-exp-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px; }
+.modal-content .kr-check { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; font-size: 13px; color: var(--text); }
+.modal-content .kr-check input { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; margin: 0; }

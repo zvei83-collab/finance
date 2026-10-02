@@ -74,6 +74,7 @@ const isFirebaseConfigured = () => {
     recurring: [],
     autoLogs: [],
     carMileage: null,
+    kinder: { funds: [], payments: [], expenses: [], kids: [] },
     settings: {
       reportTime: '23:00',
       reminders: ['14:00', '21:00'],
@@ -123,6 +124,8 @@ const isFirebaseConfigured = () => {
     if (!Array.isArray(data.settings.reminders)) data.settings.reminders = ['14:00', '21:00'];
     if (data.settings.smartReminder === undefined) data.settings.smartReminder = true;
     if (data.settings.inAppReminder === undefined) data.settings.inAppReminder = true;
+    if (!data.kinder || typeof data.kinder !== 'object') data.kinder = {};
+    ['funds', 'payments', 'expenses', 'kids'].forEach(f => { if (!Array.isArray(data.kinder[f])) data.kinder[f] = []; });
 
     data.categories.forEach(c => {
       if (c.budget === undefined) c.budget = 0;
@@ -489,7 +492,7 @@ const isFirebaseConfigured = () => {
   let currentAppMode = 'finance';
   try {
     const savedMode = localStorage.getItem('finance-app-mode');
-    if (savedMode === 'auto' || savedMode === 'finance') currentAppMode = savedMode;
+    if (savedMode === 'auto' || savedMode === 'finance' || savedMode === 'kinder') currentAppMode = savedMode;
   } catch (e) {}
 
   function setAppMode(mode) {
@@ -513,7 +516,20 @@ const isFirebaseConfigured = () => {
     const btnClearData = $('#btn-clear-data');
     const btnClearAutoData = $('#btn-clear-auto-data');
 
-    if (mode === 'auto') {
+    if (mode === 'kinder') {
+      if (iconEl) iconEl.textContent = '🧸';
+      if (titleEl) titleEl.textContent = 'Садик';
+      if (tabsNav) tabsNav.style.display = 'none';
+      if (balanceCard) balanceCard.style.display = 'none';
+      if (btnClearData) btnClearData.style.display = 'none';
+      if (btnClearAutoData) btnClearAutoData.style.display = 'none';
+
+      $$('.tab-panel').forEach(p => p.classList.remove('active'));
+      const kinderPanel = $('#tab-kinder');
+      if (kinderPanel) kinderPanel.classList.add('active');
+
+      renderKinder();
+    } else if (mode === 'auto') {
       if (iconEl) iconEl.textContent = '🚗';
       if (titleEl) titleEl.textContent = 'Бортжурнал';
       if (tabsNav) tabsNav.style.display = 'none';
@@ -877,7 +893,9 @@ const isFirebaseConfigured = () => {
   });
 
   $('#btn-add-tx').addEventListener('click', () => {
-    if (currentAppMode === 'auto') {
+    if (currentAppMode === 'kinder') {
+      openKgPay();
+    } else if (currentAppMode === 'auto') {
       openAutoModal(null);
     } else {
       openTxModal();
@@ -1755,6 +1773,7 @@ const isFirebaseConfigured = () => {
       renderRecurring();
       renderStats();
       renderAuto();
+      renderKinder();
     } catch (err) {
       console.error('Render error:', err);
     }
@@ -3193,7 +3212,10 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
   }
 
   // Settings & Messenger Report Modal Controls
-  $('#btn-open-messenger-report')?.addEventListener('click', () => openMessengerReportModal());
+  $('#btn-open-messenger-report')?.addEventListener('click', () => {
+    if (currentAppMode === 'kinder') openKgReport();
+    else openMessengerReportModal();
+  });
   $('#btn-open-settings')?.addEventListener('click', () => openSettingsModal());
 
   // ---------- In-App Reminder Banner & Badge ----------
@@ -3587,6 +3609,610 @@ ${debtText}💰 Итого общий баланс: ${fmt(totalBalanceToday)}
       btn.classList.toggle('active', !isCollapsed);
     }
   });
+
+  // ---------- Садик: сборы, взносы, расходы ----------
+  let kView = 'stats';
+  let kStatFund = 'all';
+  let kStatSearch = '';
+  let kLastFund = null;
+  let kEditPayId = null;
+  let kEditFundId = null;
+  let kEditExpId = null;
+  let kRepType = 1;
+  let kRepExpSel = new Set();
+
+  function kEnsure() {
+    if (!state.kinder || typeof state.kinder !== 'object') state.kinder = {};
+    const k = state.kinder;
+    ['funds', 'payments', 'expenses', 'kids'].forEach(f => { if (!Array.isArray(k[f])) k[f] = []; });
+    return k;
+  }
+  function kRound(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+  function kMoney(n) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(kRound(n)) + ' ₽'; }
+  function kDate(iso) { return iso ? String(iso).split('-').reverse().join('.') : ''; }
+  function kDateShort(iso) { return iso ? String(iso).split('-').reverse().slice(0, 2).join('.') : ''; }
+  function kKey(s) { return String(s || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' '); }
+  function kNorm(s) {
+    return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|[\s-])(\S)/g, (m, a, b) => a + b.toUpperCase());
+  }
+  function kSum(arr, field = 'amount') { return kRound(arr.reduce((s, x) => s + (Number(x[field]) || 0), 0)); }
+  function kFundTitle(f) { return f ? (f.name || ('Сбор ' + kMoney(f.amount))) : 'Сбор удалён'; }
+  function kFund(id) { return kEnsure().funds.find(f => f.id === id); }
+  const kByDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+
+  // Люди: по каждому ребёнку взносы, итог, недостача и статус в рамках выбранного сбора
+  function kPeople(fundId = 'all', o = {}) {
+    const k = kEnsure();
+    const map = new Map();
+    const get = (name) => {
+      const key = kKey(name);
+      if (!map.has(key)) map.set(key, { key, name: kNorm(name), pays: [], perFund: {} });
+      return map.get(key);
+    };
+    k.kids.forEach(n => get(n));
+    k.payments.forEach(p => {
+      if (!p.child) return;
+      const r = get(p.child);
+      r.pays.push(p);
+      r.perFund[p.fundId] = kRound((r.perFund[p.fundId] || 0) + p.amount);
+    });
+    const scopeFunds = fundId === 'all' ? k.funds : k.funds.filter(f => f.id === fundId);
+    const terms = String(o.search || '').split(/[,;]/).map(kKey).filter(Boolean);
+    const st = o.status || 'all';
+    const list = [];
+    map.forEach(r => {
+      r.scopePays = (fundId === 'all' ? r.pays : r.pays.filter(p => p.fundId === fundId)).slice().sort(kByDate);
+      r.total = kSum(r.scopePays);
+      r.shorts = scopeFunds
+        .filter(f => f.amount > 0)
+        .map(f => ({ fund: f, paid: r.perFund[f.id] || 0, short: kRound(f.amount - (r.perFund[f.id] || 0)) }))
+        .filter(s => s.short > 0);
+      r.status = r.total <= 0 ? 'none' : (r.shorts.length ? 'partial' : 'full');
+      if (st === 'paid' && r.total <= 0) return;
+      if ((st === 'full' || st === 'partial' || st === 'none') && r.status !== st) return;
+      if (terms.length && !terms.some(t => kKey(r.name).includes(t))) return;
+      list.push(r);
+    });
+    return list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  }
+
+  // ----- Рендер -----
+  function renderKinder() {
+    if (currentAppMode !== 'kinder') return;
+    const body = $('#kg-body');
+    if (!body) return;
+    const k = kEnsure();
+    const collected = kSum(k.payments);
+    const spent = kSum(k.expenses);
+    $('#kg-collected').textContent = kMoney(collected);
+    $('#kg-spent').textContent = kMoney(spent);
+    const balEl = $('#kg-balance');
+    balEl.textContent = kMoney(collected - spent);
+    balEl.style.color = collected - spent < 0 ? 'var(--danger)' : '';
+    $$('.kg-tab').forEach(b => b.classList.toggle('active', b.dataset.kview === kView));
+    const sf = $('#kg-stats-filter');
+    if (sf) sf.hidden = kView !== 'stats';
+    if (kView === 'pays') body.innerHTML = kPaysHTML();
+    else if (kView === 'exps') body.innerHTML = kExpsHTML();
+    else if (kView === 'funds') body.innerHTML = kFundsHTML();
+    else body.innerHTML = kStatsHTML();
+  }
+
+  function kStatsHTML() {
+    const k = kEnsure();
+    if (!k.funds.length) {
+      return '<p class="empty">Сборов пока нет. Нажмите «+ Сбор» и укажите, сколько решили собрать, а потом вносите взносы.</p>';
+    }
+    if (kStatFund !== 'all' && !kFund(kStatFund)) kStatFund = 'all';
+    let h = '<div class="auto-filter-chips" style="margin-top:10px;">';
+    h += `<button type="button" class="auto-chip-btn ${kStatFund === 'all' ? 'active' : ''}" data-kfund="all">Все сборы</button>`;
+    k.funds.forEach(f => {
+      h += `<button type="button" class="auto-chip-btn ${kStatFund === f.id ? 'active' : ''}" data-kfund="${f.id}">${escapeHtml(kFundTitle(f))}</button>`;
+    });
+    h += '</div>';
+
+    const everyone = kPeople(kStatFund);
+    const payers = everyone.filter(r => r.total > 0);
+    const fund = kStatFund === 'all' ? null : kFund(kStatFund);
+    h += '<div class="kg-box">';
+    if (fund) {
+      h += `<strong>${escapeHtml(kFundTitle(fund))}</strong> · ${fund.amount > 0 ? 'с каждого ' + kMoney(fund.amount) : 'свободная сумма'}<br>`;
+      h += `Собрано: <strong>${kMoney(kSum(payers, 'total'))}</strong> · сдали: ${payers.length} чел.`;
+      if (fund.amount > 0) {
+        h += `<br>Полностью: ${everyone.filter(r => r.status === 'full').length} · не полностью: ${everyone.filter(r => r.status === 'partial').length}`;
+        if (k.kids.length) h += ` · не сдали: ${everyone.filter(r => r.status === 'none').length}`;
+      }
+    } else {
+      h += `Всего собрано: <strong>${kMoney(kSum(k.payments))}</strong> · сдали: ${payers.length} чел.`;
+      k.funds.forEach(f => {
+        const fp = kPeople(f.id).filter(r => r.total > 0);
+        h += `<br>• ${escapeHtml(kFundTitle(f))}: ${kMoney(kSum(fp, 'total'))} (${fp.length} чел.)`;
+      });
+    }
+    h += '</div>';
+
+    const people = kPeople(kStatFund, { search: kStatSearch });
+    if (!people.length) return h + '<p class="empty">Никого не найдено.</p>';
+    h += '<ul class="list">';
+    people.forEach(r => {
+      const lines = r.scopePays.map(p => {
+        const fl = kStatFund === 'all' ? ` · ${escapeHtml(kFundTitle(kFund(p.fundId)))}` : '';
+        const nt = p.note ? ` · ${escapeHtml(p.note)}` : '';
+        return `<div><span class="kg-pay-link" data-pid="${p.id}">${kDate(p.date)} — ${kMoney(p.amount)}</span>${fl}${nt}</div>`;
+      }).join('') || '<div>Не сдавал(а)</div>';
+      const short = r.shorts.length
+        ? `<div class="kg-short">Не хватает: ${r.shorts.map(s => `${escapeHtml(kFundTitle(s.fund))} — ${kMoney(s.short)}`).join('; ')}</div>` : '';
+      h += `<li><div class="kg-row"><div><div class="kg-name">${escapeHtml(r.name)}</div><div class="kg-sub">${lines}</div>${short}</div>
+        <div class="kg-sum ${r.total > 0 ? '' : 'zero'}">${kMoney(r.total)}</div></div></li>`;
+    });
+    h += '</ul>';
+    h += `<div class="kg-total">Итого: ${kMoney(kSum(people, 'total'))} · ${people.filter(r => r.total > 0).length} чел.</div>`;
+    return h;
+  }
+
+  function kPaysHTML() {
+    const k = kEnsure();
+    if (!k.payments.length) return '<p class="empty">Взносов пока нет.</p>';
+    const items = [...k.payments].sort((a, b) => kByDate(b, a));
+    let h = '<ul class="list" style="margin-top:12px;">';
+    items.forEach(p => {
+      h += `<li data-pid="${p.id}" style="cursor:pointer;"><div class="kg-row"><div>
+        <div class="kg-name">${escapeHtml(p.child)}</div>
+        <div class="kg-sub">${kDate(p.date)} · ${escapeHtml(kFundTitle(kFund(p.fundId)))}${p.note ? ' · ' + escapeHtml(p.note) : ''}</div>
+        </div><div class="kg-sum">+ ${kMoney(p.amount)}</div></div></li>`;
+    });
+    return h + `</ul><div class="kg-total">Всего: ${kMoney(kSum(k.payments))}</div>`;
+  }
+
+  function kExpsHTML() {
+    const k = kEnsure();
+    if (!k.expenses.length) return '<p class="empty">Расходов пока нет. Нажмите «− Расход».</p>';
+    const items = [...k.expenses].sort((a, b) => kByDate(b, a));
+    let h = '<ul class="list" style="margin-top:12px;">';
+    items.forEach(e => {
+      h += `<li data-eid="${e.id}" style="cursor:pointer;"><div class="kg-row"><div>
+        <div class="kg-name">${escapeHtml(e.note)}</div>
+        <div class="kg-sub">${kDate(e.date)}</div>
+        </div><div class="kg-sum" style="color:var(--expense);">− ${kMoney(e.amount)}</div></div></li>`;
+    });
+    const spent = kSum(k.expenses);
+    return h + `</ul><div class="kg-total">Потрачено: ${kMoney(spent)} · остаток: ${kMoney(kSum(k.payments) - spent)}</div>`;
+  }
+
+  function kFundsHTML() {
+    const k = kEnsure();
+    let h = '';
+    if (!k.funds.length) h += '<p class="empty">Сборов пока нет. Нажмите «+ Сбор».</p>';
+    else {
+      h += '<ul class="list" style="margin-top:12px;">';
+      k.funds.forEach(f => {
+        const fp = kPeople(f.id).filter(r => r.total > 0);
+        h += `<li data-fid="${f.id}" style="cursor:pointer;"><div class="kg-row"><div>
+          <div class="kg-name">${escapeHtml(kFundTitle(f))}</div>
+          <div class="kg-sub">${f.amount > 0 ? 'с каждого ' + kMoney(f.amount) : 'свободная сумма'} · сдали ${fp.length} чел.</div>
+          </div><div class="kg-sum">${kMoney(kSum(fp, 'total'))}</div></div></li>`;
+      });
+      h += '</ul>';
+    }
+    h += `<div class="kg-danger-zone">
+      <button type="button" class="secondary-sm" data-kact="kids">👶 Список группы (${k.kids.length})</button>
+      <button type="button" class="ghost-sm" style="color:var(--danger);" data-kact="clear">🗑️ Очистить данные садика</button>
+    </div>`;
+    return h;
+  }
+
+  // ----- Взнос -----
+  function kgFundSelect(sel, selected, withAll) {
+    const k = kEnsure();
+    sel.innerHTML = '';
+    if (withAll) sel.add(new Option('Все сборы', 'all'));
+    k.funds.forEach(f => sel.add(new Option(kFundTitle(f), f.id)));
+    if (selected) sel.value = selected;
+  }
+
+  function kgPayHint() {
+    const hint = $('#kgp-hint');
+    const amountEl = $('#kgp-amount');
+    const key = kKey($('#kgp-child').value);
+    const f = kFund($('#kgp-fund').value);
+    amountEl.placeholder = '0';
+    hint.className = 'kg-hint';
+    hint.textContent = '';
+    if (!key || !f) return;
+    const prev = kSum(kEnsure().payments.filter(p => kKey(p.child) === key && p.fundId === f.id && p.id !== kEditPayId));
+    if (f.amount > 0) {
+      const left = kRound(f.amount - prev);
+      if (left > 0) {
+        hint.textContent = `Ранее сдано: ${kMoney(prev)} из ${kMoney(f.amount)} · осталось ${kMoney(left)}`;
+        amountEl.placeholder = String(left);
+      } else {
+        hint.textContent = `По этому сбору уже сдано полностью (${kMoney(prev)})`;
+        hint.classList.add('warn');
+      }
+    } else if (prev > 0) {
+      hint.textContent = `Ранее сдано: ${kMoney(prev)}`;
+    }
+  }
+
+  function openKgPay(id = null) {
+    const k = kEnsure();
+    if (!k.funds.length) {
+      showToast('Сначала создайте сбор', 'warning');
+      openKgFund();
+      return;
+    }
+    const p = id ? k.payments.find(x => x.id === id) : null;
+    if (id && !p) return;
+    kEditPayId = p ? p.id : null;
+    $('#kgp-title').textContent = p ? 'Изменить взнос' : 'Новый взнос';
+    $('#kgp-delete').hidden = !p;
+    $('#kgp-save-next').hidden = !!p;
+    const dl = $('#kgp-names');
+    dl.innerHTML = '';
+    kPeople('all').forEach(r => dl.appendChild(new Option(r.name)));
+    $('#kgp-child').value = p ? p.child : '';
+    let fid = p ? p.fundId : (kLastFund && kFund(kLastFund) ? kLastFund : (kStatFund !== 'all' && kFund(kStatFund) ? kStatFund : k.funds[0].id));
+    kgFundSelect($('#kgp-fund'), fid, false);
+    $('#kgp-amount').value = p ? p.amount : '';
+    $('#kgp-date').value = p ? p.date : todayISO();
+    $('#kgp-note').value = p ? (p.note || '') : '';
+    kgPayHint();
+    openModal('#modal-kg-pay');
+    setTimeout(() => $('#kgp-child').focus(), 50);
+  }
+
+  function kgSavePay(next) {
+    const k = kEnsure();
+    const child = kNorm($('#kgp-child').value);
+    const amount = kRound(parseFloat(String($('#kgp-amount').value).replace(',', '.')));
+    const fundId = $('#kgp-fund').value;
+    const date = $('#kgp-date').value || todayISO();
+    const note = $('#kgp-note').value.trim();
+    if (!child) { showToast('Введите фамилию и имя ребёнка', 'warning'); return; }
+    if (!amount || amount <= 0) { showToast('Введите корректную сумму', 'warning'); return; }
+    const fund = kFund(fundId);
+    if (!fund) { showToast('Выберите сбор', 'warning'); return; }
+    const exist = kPeople('all').find(r => r.key === kKey(child));
+    const name = exist ? exist.name : child;
+
+    if (kEditPayId) {
+      const p = k.payments.find(x => x.id === kEditPayId);
+      if (p) Object.assign(p, { child: name, fundId, amount, date, note });
+    } else {
+      k.payments.push({ id: uid(), child: name, fundId, amount, date, note });
+    }
+    kLastFund = fundId;
+    const paidNow = kSum(k.payments.filter(p => kKey(p.child) === kKey(name) && p.fundId === fundId));
+    save();
+    renderKinder();
+    if (fund.amount > 0 && paidNow > fund.amount) {
+      showToast(`Взнос сохранён. Переплата по сбору: ${kMoney(paidNow - fund.amount)}`, 'warning', 4000);
+    } else {
+      showToast('Взнос сохранён', 'success', 2000);
+    }
+    if (next && !kEditPayId) {
+      $('#kgp-child').value = '';
+      $('#kgp-amount').value = '';
+      $('#kgp-note').value = '';
+      const dl = $('#kgp-names');
+      dl.innerHTML = '';
+      kPeople('all').forEach(r => dl.appendChild(new Option(r.name)));
+      kgPayHint();
+      setTimeout(() => $('#kgp-child').focus(), 50);
+    } else {
+      closeModal('#modal-kg-pay');
+    }
+  }
+
+  $('#kgp-save')?.addEventListener('click', () => kgSavePay(false));
+  $('#kgp-save-next')?.addEventListener('click', () => kgSavePay(true));
+  $('#kgp-child')?.addEventListener('input', kgPayHint);
+  $('#kgp-child')?.addEventListener('change', kgPayHint);
+  $('#kgp-fund')?.addEventListener('change', kgPayHint);
+  $('#kgp-delete')?.addEventListener('click', () => {
+    if (!kEditPayId || !confirm('Удалить этот взнос?')) return;
+    const k = kEnsure();
+    k.payments = k.payments.filter(p => p.id !== kEditPayId);
+    save(); closeModal('#modal-kg-pay'); renderKinder();
+    showToast('Взнос удалён', 'info', 2000);
+  });
+
+  // ----- Сбор -----
+  function openKgFund(id = null) {
+    const f = id ? kFund(id) : null;
+    kEditFundId = f ? f.id : null;
+    $('#kgf-title').textContent = f ? 'Изменить сбор' : 'Новый сбор';
+    $('#kgf-name').value = f ? (f.name || '') : '';
+    $('#kgf-amount').value = f && f.amount > 0 ? f.amount : '';
+    $('#kgf-delete').hidden = !f;
+    openModal('#modal-kg-fund');
+    setTimeout(() => $('#kgf-amount').focus(), 50);
+  }
+
+  $('#kgf-save')?.addEventListener('click', () => {
+    const k = kEnsure();
+    const amount = kRound(parseFloat(String($('#kgf-amount').value).replace(',', '.')) || 0);
+    let name = $('#kgf-name').value.trim();
+    if (amount < 0) { showToast('Сумма не может быть отрицательной', 'warning'); return; }
+    if (!name && !amount) { showToast('Укажите название или сумму сбора', 'warning'); return; }
+    if (!name) name = 'Сбор ' + kMoney(amount);
+    if (kEditFundId) {
+      const f = kFund(kEditFundId);
+      if (f) Object.assign(f, { name, amount });
+    } else {
+      const f = { id: uid(), name, amount, created: todayISO() };
+      k.funds.push(f);
+      kLastFund = f.id;
+    }
+    save(); closeModal('#modal-kg-fund'); renderKinder();
+    showToast('Сбор сохранён', 'success', 2000);
+  });
+
+  $('#kgf-delete')?.addEventListener('click', () => {
+    if (!kEditFundId) return;
+    const k = kEnsure();
+    const cnt = k.payments.filter(p => p.fundId === kEditFundId).length;
+    if (!confirm(cnt ? `Удалить сбор вместе со всеми его взносами (${cnt} шт.)?` : 'Удалить этот сбор?')) return;
+    k.payments = k.payments.filter(p => p.fundId !== kEditFundId);
+    k.funds = k.funds.filter(f => f.id !== kEditFundId);
+    if (kStatFund === kEditFundId) kStatFund = 'all';
+    save(); closeModal('#modal-kg-fund'); renderKinder();
+    showToast('Сбор удалён', 'info', 2000);
+  });
+
+  // ----- Расход -----
+  function openKgExp(id = null) {
+    const e = id ? kEnsure().expenses.find(x => x.id === id) : null;
+    kEditExpId = e ? e.id : null;
+    $('#kge-title').textContent = e ? 'Изменить расход' : 'Новый расход';
+    $('#kge-date').value = e ? e.date : todayISO();
+    $('#kge-amount').value = e ? e.amount : '';
+    $('#kge-note').value = e ? e.note : '';
+    $('#kge-delete').hidden = !e;
+    openModal('#modal-kg-exp');
+    setTimeout(() => $('#kge-amount').focus(), 50);
+  }
+
+  $('#kge-save')?.addEventListener('click', () => {
+    const k = kEnsure();
+    const amount = kRound(parseFloat(String($('#kge-amount').value).replace(',', '.')));
+    const date = $('#kge-date').value || todayISO();
+    const note = $('#kge-note').value.trim();
+    if (!amount || amount <= 0) { showToast('Введите корректную сумму', 'warning'); return; }
+    if (!note) { showToast('Укажите, на что потратили', 'warning'); return; }
+    if (kEditExpId) {
+      const e = k.expenses.find(x => x.id === kEditExpId);
+      if (e) Object.assign(e, { amount, date, note });
+    } else {
+      k.expenses.push({ id: uid(), amount, date, note });
+    }
+    save(); closeModal('#modal-kg-exp'); renderKinder();
+    showToast('Расход сохранён', 'success', 2000);
+  });
+
+  $('#kge-delete')?.addEventListener('click', () => {
+    if (!kEditExpId || !confirm('Удалить этот расход?')) return;
+    const k = kEnsure();
+    k.expenses = k.expenses.filter(e => e.id !== kEditExpId);
+    save(); closeModal('#modal-kg-exp'); renderKinder();
+    showToast('Расход удалён', 'info', 2000);
+  });
+
+  // ----- Список группы -----
+  function openKgKids() {
+    $('#kgk-text').value = kEnsure().kids.join('\n');
+    openModal('#modal-kg-kids');
+  }
+  $('#kgk-save')?.addEventListener('click', () => {
+    const seen = new Set();
+    const kids = [];
+    $('#kgk-text').value.split('\n').forEach(line => {
+      const name = kNorm(line);
+      const key = kKey(name);
+      if (name && !seen.has(key)) { seen.add(key); kids.push(name); }
+    });
+    kids.sort((a, b) => a.localeCompare(b, 'ru'));
+    kEnsure().kids = kids;
+    save(); closeModal('#modal-kg-kids'); renderKinder();
+    showToast(`Список группы сохранён (${kids.length})`, 'success', 2000);
+  });
+
+  function kgClearAll() {
+    const k = kEnsure();
+    if (!confirm(`⚠️ Очистить все данные садика?\n\nСборов: ${k.funds.length}\nВзносов: ${k.payments.length}\nРасходов: ${k.expenses.length}\n\nФинансы и бортжурнал не затрагиваются.`)) return;
+    state.kinder = { funds: [], payments: [], expenses: [], kids: [] };
+    kStatFund = 'all';
+    save(); renderKinder();
+    showToast('Данные садика очищены', 'info', 3000);
+  }
+
+  // ----- События панели -----
+  $('#kg-add-pay')?.addEventListener('click', () => openKgPay());
+  $('#kg-add-exp')?.addEventListener('click', () => openKgExp());
+  $('#kg-add-fund')?.addEventListener('click', () => openKgFund());
+  $('#kg-open-report')?.addEventListener('click', () => openKgReport());
+  $('#kg-search')?.addEventListener('input', (e) => { kStatSearch = e.target.value; renderKinder(); });
+  $$('.kg-tab').forEach(b => b.addEventListener('click', () => { kView = b.dataset.kview; renderKinder(); }));
+  $('#kg-body')?.addEventListener('click', (e) => {
+    const t = e.target;
+    const chip = t.closest('[data-kfund]');
+    if (chip) { kStatFund = chip.dataset.kfund; renderKinder(); return; }
+    const link = t.closest('.kg-pay-link');
+    if (link) { openKgPay(link.dataset.pid); return; }
+    const act = t.closest('[data-kact]');
+    if (act) { if (act.dataset.kact === 'kids') openKgKids(); else if (act.dataset.kact === 'clear') kgClearAll(); return; }
+    const li = t.closest('li');
+    if (!li) return;
+    if (li.dataset.pid) openKgPay(li.dataset.pid);
+    else if (li.dataset.eid) openKgExp(li.dataset.eid);
+    else if (li.dataset.fid) openKgFund(li.dataset.fid);
+  });
+
+  // ----- Отчёты для чата -----
+  function openKgReport() {
+    const k = kEnsure();
+    kgFundSelect($('#kr-fund'), 'all', true);
+    kRepExpSel = new Set(k.expenses.map(e => e.id));
+    kRepUI();
+    openModal('#modal-kg-report');
+  }
+
+  function kRepExpList() {
+    const box = $('#kr-exp-list');
+    const items = [...kEnsure().expenses].sort(kByDate);
+    box.innerHTML = items.length
+      ? items.map(e => `<label class="kr-check"><input type="checkbox" data-eid="${e.id}" ${kRepExpSel.has(e.id) ? 'checked' : ''} /><span>${kDate(e.date)} — ${kMoney(e.amount)} — ${escapeHtml(e.note)}</span></label>`).join('')
+      : '<div class="kg-hint">Расходов пока нет.</div>';
+  }
+
+  function kRepUI() {
+    $$('.kr-type').forEach(b => b.classList.toggle('active', Number(b.dataset.rt) === kRepType));
+    [1, 3, 4].forEach(n => { const el = $('#kr-opt-' + n); if (el) el.hidden = kRepType !== n; });
+    if (kRepType === 4) kRepExpList();
+    $('#kr-preview').textContent = kReportText();
+  }
+
+  function kReportText() {
+    const k = kEnsure();
+    const collected = kSum(k.payments);
+    const spentAll = kSum(k.expenses);
+    const today = kDate(todayISO());
+    const exps = [...k.expenses].sort(kByDate);
+    const expLine = (e) => `• ${kDate(e.date)} — ${kMoney(e.amount)} — ${e.note}`;
+    const L = [];
+
+    if (kRepType === 1) {
+      L.push('🧸 Отчёт по средствам группы', `на ${today}`, '',
+        `Собрано: ${kMoney(collected)}`, `Потрачено: ${kMoney(spentAll)}`, `Остаток: ${kMoney(collected - spentAll)}`);
+      if ($('#kr-count').checked) {
+        const all = kPeople('all');
+        const n = all.filter(r => r.total > 0).length;
+        L.push('', `Сдали: ${n} чел.` + (k.kids.length ? ` из ${all.length}` : ''));
+      }
+      if (exps.length) L.push('', 'Расходы:', ...exps.map(expLine));
+
+    } else if (kRepType === 2) {
+      const all = kPeople('all');
+      const n = all.filter(r => r.total > 0).length;
+      L.push('🧸 Сколько сдали', `на ${today}`, '',
+        `Сдали: ${n} чел.` + (k.kids.length ? ` из ${all.length}` : ''), `Общая сумма: ${kMoney(collected)}`);
+      if (k.funds.length) {
+        L.push('', 'По сборам:');
+        k.funds.forEach(f => {
+          const ppl = kPeople(f.id).filter(r => r.total > 0);
+          let s = `• ${kFundTitle(f)}: ${ppl.length} чел., ${kMoney(kSum(ppl, 'total'))}`;
+          if (f.amount > 0) s += ` (полностью — ${ppl.filter(r => r.status === 'full').length})`;
+          L.push(s);
+        });
+      }
+
+    } else if (kRepType === 3) {
+      const fid = $('#kr-fund').value || 'all';
+      const st = $('#kr-status').value;
+      const split = $('#kr-split').checked;
+      const dates = $('#kr-dates').checked;
+      const people = kPeople(fid, { status: st, search: $('#kr-search').value });
+      const scopeFunds = fid === 'all' ? k.funds : k.funds.filter(f => f.id === fid);
+      const stLabel = { full: 'сдали полностью', partial: 'сдали не полностью', none: 'не сдали', all: 'все по списку' }[st];
+      L.push('🧸 Кто сколько сдал', `на ${today}`, fid === 'all' ? 'Сбор: все сборы' : `Сбор: ${kFundTitle(kFund(fid))}`);
+      if (stLabel) L.push(`Показаны: ${stLabel}`);
+      L.push('');
+      if (!people.length) L.push('Нет подходящих записей');
+      people.forEach((r, i) => {
+        let line = `${i + 1}. ${r.name}` + (r.total > 0 ? ` — ${kMoney(r.total)}` : '');
+        if (!split) {
+          if (dates && r.scopePays.length) line += ` (${r.scopePays.map(p => kDateShort(p.date)).join(', ')})`;
+          if (r.shorts.length) line += ` · не хватает ${kMoney(kSum(r.shorts, 'short'))}`;
+          L.push(line);
+        } else {
+          L.push(line);
+          scopeFunds.forEach(f => {
+            const ps = r.scopePays.filter(p => p.fundId === f.id);
+            const paid = kSum(ps);
+            const sh = r.shorts.find(s => s.fund.id === f.id);
+            if (!paid && !sh) return;
+            let s = `   • ${kFundTitle(f)}: ${paid ? kMoney(paid) : 'не сдано'}`;
+            if (dates && ps.length) s += ` (${ps.map(p => kDateShort(p.date)).join(', ')})`;
+            if (sh) s += paid ? ` · не хватает ${kMoney(sh.short)}` : ` (нужно ${kMoney(sh.short)})`;
+            L.push(s);
+          });
+        }
+      });
+      if (people.length) {
+        L.push('', `Итого: ${people.filter(r => r.total > 0).length} чел., ${kMoney(kSum(people, 'total'))}`);
+      }
+
+    } else {
+      const sel = exps.filter(e => kRepExpSel.has(e.id));
+      L.push('🧾 Расходы группы', `на ${today}`, '');
+      if (!sel.length) L.push('Расходы не выбраны');
+      else L.push(...sel.map(expLine));
+      L.push('');
+      if (sel.length !== exps.length) L.push(`Выбрано: ${sel.length} из ${exps.length}, на ${kMoney(kSum(sel))}`);
+      L.push(`Потрачено всего: ${kMoney(spentAll)}`, `Собрано: ${kMoney(collected)}`, `Остаток: ${kMoney(collected - spentAll)}`);
+    }
+    return L.join('\n');
+  }
+
+  $$('.kr-type').forEach(b => b.addEventListener('click', () => { kRepType = Number(b.dataset.rt); kRepUI(); }));
+  ['#kr-count', '#kr-fund', '#kr-status', '#kr-split', '#kr-dates'].forEach(sel => $(sel)?.addEventListener('change', kRepUI));
+  $('#kr-search')?.addEventListener('input', kRepUI);
+  $('#kr-exp-list')?.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[data-eid]');
+    if (!cb) return;
+    if (cb.checked) kRepExpSel.add(cb.dataset.eid); else kRepExpSel.delete(cb.dataset.eid);
+    $('#kr-preview').textContent = kReportText();
+  });
+  $('#kr-exp-all')?.addEventListener('click', () => {
+    const ids = kEnsure().expenses.map(e => e.id);
+    kRepExpSel = kRepExpSel.size === ids.length ? new Set() : new Set(ids);
+    kRepUI();
+  });
+  $('#kr-copy')?.addEventListener('click', () => copyReportToClipboard(kReportText()));
+  $('#kr-share')?.addEventListener('click', async () => {
+    const text = kReportText();
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Отчёт по средствам группы', text }); }
+      catch (err) { if (err.name !== 'AbortError') copyReportToClipboard(text); }
+    } else {
+      copyReportToClipboard(text);
+    }
+  });
+
+  // ----- Экспорт -----
+  function exportKinderCSV() {
+    const k = kEnsure();
+    if (!k.funds.length && !k.payments.length && !k.expenses.length) {
+      showToast('В разделе «Садик» пока нет данных для экспорта', 'warning');
+      return;
+    }
+    const rows = [];
+    const line = (arr) => rows.push(arr.map(csvEscape).join(';'));
+    const num = (n) => kRound(n).toFixed(2).replace('.', ',');
+
+    line(['ВЗНОСЫ']);
+    line(['Дата', 'Ребёнок', 'Сбор', 'Сумма (₽)', 'Заметка']);
+    [...k.payments].sort((a, b) => kKey(a.child).localeCompare(kKey(b.child), 'ru') || kByDate(a, b))
+      .forEach(p => line([p.date, p.child, kFundTitle(kFund(p.fundId)), num(p.amount), p.note || '']));
+    line([]);
+    line(['СВОДКА ПО ДЕТЯМ']);
+    line(['Ребёнок', ...k.funds.map(kFundTitle), 'Всего (₽)']);
+    kPeople('all').forEach(r => line([r.name, ...k.funds.map(f => num(r.perFund[f.id] || 0)), num(r.total)]));
+    line([]);
+    line(['РАСХОДЫ']);
+    line(['Дата', 'Сумма (₽)', 'На что']);
+    [...k.expenses].sort(kByDate).forEach(e => line([e.date, num(e.amount), e.note]));
+    line([]);
+    line(['ИТОГО']);
+    line(['Собрано (₽)', num(kSum(k.payments))]);
+    line(['Потрачено (₽)', num(kSum(k.expenses))]);
+    line(['Остаток (₽)', num(kSum(k.payments) - kSum(k.expenses))]);
+
+    downloadFile('\uFEFF' + rows.join('\r\n'), `kindergarten-${todayISO()}.csv`, 'text/csv;charset=utf-8;');
+    closeModal('#modal-export');
+    showToast('🧸 Данные садика выгружены в Excel (CSV)', 'success', 3000);
+  }
+  $('#btn-export-kinder-csv')?.addEventListener('click', exportKinderCSV);
 
   // ---------- Init ----------
   render();
